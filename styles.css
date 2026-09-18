@@ -911,6 +911,26 @@ h2 {
   margin-top: 8px;
 }
 
+.camera-rotation-actions {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.camera-rotation-actions .compact-action {
+  width: 100%;
+}
+
+.camera-rotation-actions output {
+  min-width: 48px;
+  color: var(--cyan);
+  font-size: 0.875rem;
+  font-weight: 900;
+  text-align: center;
+}
+
 .film-strip-tools > .range-control {
   margin-top: 16px;
 }
@@ -931,6 +951,84 @@ h2 {
   color: var(--muted);
   font-size: 0.875rem;
   font-weight: 700;
+}
+
+.film-slot-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.film-slot {
+  display: grid;
+  grid-template-columns: 28px 44px minmax(0, 1fr) repeat(3, 36px);
+  align-items: center;
+  gap: 4px;
+  min-height: 52px;
+  padding: 4px;
+  border: 2px solid var(--border-light);
+  color: var(--text);
+  background: var(--ink-soft);
+}
+
+.film-slot-index {
+  color: var(--pink);
+  font-size: 0.875rem;
+  font-weight: 900;
+  text-align: center;
+}
+
+.film-slot-thumb {
+  width: 44px;
+  height: 36px;
+  border: 2px solid var(--border-dark);
+  object-fit: cover;
+  background: var(--ink-raised);
+}
+
+.film-slot .film-slot-pick {
+  width: 44px;
+  height: 36px;
+  overflow: hidden;
+  padding: 0;
+  border-color: var(--border-dark);
+}
+
+.film-slot-pick .film-slot-thumb {
+  display: block;
+  border: 0;
+}
+
+.film-slot-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.film-slot button {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 2px solid var(--border-light);
+  color: var(--text);
+  background: var(--ink-raised);
+  font-size: 0.875rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.film-slot button:hover:not(:disabled) {
+  color: var(--ink);
+  background: var(--cyan);
+}
+
+.film-slot button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
 }
 
 .liquify-mode-control {
@@ -1084,6 +1182,29 @@ input[type="range"]::-moz-range-thumb {
 .toggle-row small {
   color: var(--muted);
   font-size: 0.75rem;
+}
+
+.date-input-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  margin-top: 8px;
+  color: var(--text);
+  font-size: 0.875rem;
+  font-weight: 900;
+}
+
+.date-input-row input {
+  min-height: 40px;
+  width: 100%;
+  padding: 4px 8px;
+  border: 2px solid var(--border-light);
+  border-radius: 0;
+  color: var(--text);
+  background: var(--ink-raised);
+  color-scheme: dark;
+  font: inherit;
 }
 
 .switch {
@@ -1303,6 +1424,25 @@ input[type="range"]::-moz-range-thumb {
 
   .brush-actions span {
     grid-column: 1 / -1;
+  }
+
+  .film-slot {
+    grid-template-columns: 24px 40px minmax(0, 1fr) repeat(3, 32px);
+  }
+
+  .film-slot button {
+    width: 32px;
+    height: 32px;
+  }
+
+  .film-slot .film-slot-pick {
+    width: 40px;
+    height: 32px;
+  }
+
+  .film-slot-pick .film-slot-thumb {
+    width: 40px;
+    height: 32px;
   }
 
 }

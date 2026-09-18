@@ -31,6 +31,7 @@ const elements = {
   ratioButtons: $$("[data-ratio]"),
   formatButtons: $$('[data-format]'),
   dateToggle: $("#date-toggle"),
+  dateInput: $("#date-input"),
   fileMeta: $("#file-meta"),
   statusSize: $("#status-size"),
   processing: $("#processing-indicator"),
@@ -48,15 +49,19 @@ const elements = {
   stickerRotationValue: $("#sticker-rotation-value"),
   deleteSticker: $("#delete-sticker"),
   cameraOverlayButtons: $$('[data-camera-overlay]'),
-  rotateCameraOverlay: $("#rotate-camera-overlay"),
+  rotateCameraLeft: $("#rotate-camera-left"),
+  rotateCameraRight: $("#rotate-camera-right"),
+  cameraRotationValue: $("#camera-rotation-value"),
   filmStripButtons: $$('[data-film-strip]'),
   filmStripTools: $("#film-strip-tools"),
   filmFrameCount: $("#film-frame-count"),
   filmFrameCountValue: $("#film-frame-count-value"),
   filmFrameInput: $("#film-frame-input"),
+  filmSlotInput: $("#film-slot-input"),
   uploadFilmFrames: $("#upload-film-frames"),
   clearFilmFrames: $("#clear-film-frames"),
   filmFrameStatus: $("#film-frame-status"),
+  filmSlotList: $("#film-slot-list"),
 };
 
 const state = {
@@ -67,6 +72,7 @@ const state = {
   grain: 0.24,
   ratio: "original",
   showDate: false,
+  dateValue: formatDateInputValue(new Date()),
   comparing: false,
   renderFrame: null,
   seed: Math.floor(Math.random() * 100000),
@@ -87,6 +93,7 @@ const state = {
   filmStrip: false,
   filmFrameCount: 2,
   filmFrameImages: [],
+  pendingFilmSlot: null,
 };
 
 const stickerCatalog = window.STICKER_CATALOG || [];
@@ -114,6 +121,10 @@ const filterNames = {
   pixel: "픽셀 블록",
   summerfilm: "청량 필름",
 };
+
+function formatDateInputValue(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
 
 function clamp(value, min = 0, max = 255) {
   return Math.max(min, Math.min(max, value));
@@ -341,8 +352,15 @@ function applyNeonBrush(ctx, width, height, strength, strokes, seed, phaseOffset
       const endX = Math.min(width - 1, Math.ceil(centerX + radius));
       const startY = Math.max(0, Math.floor(centerY - radius));
       const endY = Math.min(height - 1, Math.ceil(centerY + radius));
-      const dragX = point.dx * width * (1.8 + effectStrength * 2.2);
-      const dragY = point.dy * height * (1.8 + effectStrength * 2.2);
+      const motionX = point.dx * width;
+      const motionY = point.dy * height;
+      const motionLength = Math.hypot(motionX, motionY);
+      const hasMotion = motionLength > 0.5;
+      const directionX = hasMotion ? motionX / motionLength : 0;
+      const directionY = hasMotion ? motionY / motionLength : 0;
+      const normalX = -directionY;
+      const normalY = directionX;
+      const dragScale = 2.2 + effectStrength * 2.4;
       const phase = basePhase + strokeIndex * 0.83 + pointIndex * 0.27;
       const channelShift = Math.max(1, Math.round(radius * 0.08 * effectStrength));
 
@@ -353,17 +371,28 @@ function applyNeonBrush(ctx, width, height, strength, strokes, seed, phaseOffset
           const distance = Math.hypot(relativeX, relativeY);
           if (distance > radius) continue;
           const normalized = distance / radius;
-          const falloff = Math.pow(1 - normalized, 1.85);
-          const angle = Math.atan2(relativeY, relativeX);
-          const ripple = Math.sin(normalized * Math.PI * 4.2 - phase) * radius * 0.13 * effectStrength * falloff;
-          const swirl = radius * 0.14 * effectStrength * falloff;
+          const falloff = Math.pow(1 - normalized, 2.15);
+          let offsetX;
+          let offsetY;
+          if (hasMotion) {
+            const along = relativeX * directionX + relativeY * directionY;
+            const wave = Math.sin(along / radius * Math.PI * 1.8 + phase)
+              * radius * 0.035 * effectStrength * falloff;
+            offsetX = -motionX * dragScale * falloff + normalX * wave;
+            offsetY = -motionY * dragScale * falloff + normalY * wave;
+          } else {
+            const pinch = (0.16 + effectStrength * 0.22) * falloff;
+            const twist = 0.055 * effectStrength * falloff;
+            offsetX = relativeX * pinch - relativeY * twist;
+            offsetY = relativeY * pinch + relativeX * twist;
+          }
           const sourceX = Math.round(clamp(
-            x - dragX * falloff + Math.cos(angle) * ripple - Math.sin(angle) * swirl,
+            x + offsetX,
             0,
             width - 1,
           ));
           const sourceY = Math.round(clamp(
-            y - dragY * falloff + Math.sin(angle) * ripple + Math.cos(angle) * swirl,
+            y + offsetY,
             0,
             height - 1,
           ));
@@ -377,9 +406,11 @@ function applyNeonBrush(ctx, width, height, strength, strokes, seed, phaseOffset
           const red = clamp(source[redSource] * 1.18 + source[blueSource + 2] * 0.07);
           const green = clamp(source[centerSource + 1] * 0.72 + Math.min(red, source[blueSource + 2]) * 0.08);
           const blue = clamp(source[blueSource + 2] * 1.24 + source[redSource] * 0.08);
-          data[target] = mixChannel(data[target], red, mix);
-          data[target + 1] = mixChannel(data[target + 1], green, mix);
-          data[target + 2] = mixChannel(data[target + 2], blue, mix);
+          // Always blend from the untouched frame. Re-blending already processed
+          // pixels made overlapping brush samples look like stacked circular stamps.
+          data[target] = mixChannel(source[target], red, mix);
+          data[target + 1] = mixChannel(source[target + 1], green, mix);
+          data[target + 2] = mixChannel(source[target + 2], blue, mix);
         }
       }
     });
@@ -597,9 +628,15 @@ function applyPixelate(ctx, width, height, strength) {
   ctx.putImageData(imageData, 0, 0);
 }
 
+function selectedDateParts() {
+  const fallback = formatDateInputValue(new Date());
+  const [year, month, day] = (state.dateValue || fallback).split("-");
+  return { year, month, day };
+}
+
 function addVerticalFilmDate(ctx, width, height, strength) {
-  const now = new Date();
-  const date = `${String(now.getFullYear()).slice(-2)}.${String(now.getMonth() + 1).padStart(2, "0")}.${String(now.getDate()).padStart(2, "0")}`;
+  const { year, month, day } = selectedDateParts();
+  const date = `${year.slice(-2)}.${month}.${day}`;
   const size = Math.max(12, Math.round(Math.min(width, height) * 0.022));
   ctx.save();
   ctx.translate(width * 0.055, height * 0.86);
@@ -735,8 +772,8 @@ function applyComic(ctx, width, height, strength) {
   const source = new Uint8ClampedArray(imageData.data);
   const data = imageData.data;
   const light = new Uint8ClampedArray(width * height);
-  const edgeThreshold = 48 - strength * 24;
-  const inkThreshold = 66 + strength * 14;
+  const edgeThreshold = 82 - strength * 12;
+  const inkThreshold = 38 + strength * 10;
   const matrix = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
 
   for (let i = 0, p = 0; i < source.length; i += 4, p += 1) light[p] = luminance(source, i);
@@ -751,10 +788,10 @@ function applyComic(ctx, width, height, strength) {
       const gx = Math.abs(light[y * width + right] - light[y * width + left]);
       const gy = Math.abs(light[down * width + x] - light[up * width + x]);
       const edge = gx + gy > edgeThreshold;
-      const gray = clamp((light[y * width + x] - 128) * (1.12 + strength * 0.82) + 138);
+      const gray = clamp((light[y * width + x] - 128) * (1 + strength * 0.42) + 162);
       const screenThreshold = (matrix[(y % 4) * 4 + (x % 4)] + 0.5) / 16 * 255;
       const shadowInk = gray < inkThreshold;
-      const toneInk = gray < 218 - strength * 20 && screenThreshold > gray + 18;
+      const toneInk = gray < 174 - strength * 8 && screenThreshold > gray + 92;
       const value = edge || shadowInk || toneInk ? 0 : 255;
       data[target] = value;
       data[target + 1] = value;
@@ -765,8 +802,8 @@ function applyComic(ctx, width, height, strength) {
 }
 
 function addDateStamp(ctx, width, height) {
-  const now = new Date();
-  const value = `${String(now.getFullYear()).slice(-2)}  ${String(now.getMonth() + 1).padStart(2, "0")}  ${String(now.getDate()).padStart(2, "0")}`;
+  const { year, month, day } = selectedDateParts();
+  const value = `${year.slice(-2)}  ${month}  ${day}`;
   const size = Math.max(18, Math.round(width * 0.032));
   const x = width - Math.round(width * 0.045);
   const y = height - Math.round(height * 0.05);
@@ -787,7 +824,7 @@ function addPixelEffects(ctx, width, height, preset, strength, grain, seed) {
   const source = new Uint8ClampedArray(imageData.data);
   const data = imageData.data;
   const random = mulberry32(seed);
-  const grainAmount = grain * (preset === "analog" ? 44 : 30);
+  const grainAmount = grain * (preset === "analog" ? 64 : 46);
   const shift = Math.max(1, Math.round(width * 0.004 * strength));
 
   for (let y = 0; y < height; y += 1) {
@@ -1277,25 +1314,125 @@ function updatePatternUI() {
 }
 
 function updateOverlayUI() {
-  elements.rotateCameraOverlay.disabled = state.cameraOverlay === "off";
-  elements.rotateCameraOverlay.textContent = state.cameraRotation === 90 ? "원위치" : "90° 회전";
+  const cameraEnabled = state.cameraOverlay !== "off";
+  elements.rotateCameraLeft.disabled = !cameraEnabled;
+  elements.rotateCameraRight.disabled = !cameraEnabled;
+  elements.cameraRotationValue.textContent = `${state.cameraRotation}°`;
   elements.filmStripTools.hidden = !state.filmStrip;
   elements.uploadFilmFrames.disabled = !state.image;
-  elements.clearFilmFrames.disabled = state.filmFrameImages.length === 0;
+  const activeFrames = state.filmFrameImages.slice(0, state.filmFrameCount).filter(Boolean).length;
+  elements.clearFilmFrames.disabled = activeFrames === 0;
   elements.filmFrameCount.value = String(state.filmFrameCount);
   elements.filmFrameCountValue.textContent = `${state.filmFrameCount}칸`;
-  elements.filmFrameStatus.textContent = state.filmFrameImages.length > 0
-    ? `${state.filmFrameImages.length}장 지정 · 나머지는 현재 사진`
+  elements.filmFrameStatus.textContent = activeFrames > 0
+    ? `${activeFrames}장 지정 · 빈 칸은 현재 사진`
     : "현재 사진 반복";
   setNormalizedRangeFill(elements.filmFrameCount);
+  renderFilmSlotList();
 }
 
 function clearFilmFrameImages() {
   filmFrameUrls.forEach((url) => URL.revokeObjectURL(url));
   filmFrameUrls.clear();
   state.filmFrameImages = [];
+  state.pendingFilmSlot = null;
   elements.filmFrameInput.value = "";
+  elements.filmSlotInput.value = "";
   updateOverlayUI();
+}
+
+function releaseFilmFrame(frame) {
+  if (!frame) return;
+  URL.revokeObjectURL(frame.url);
+  filmFrameUrls.delete(frame.url);
+}
+
+function renderFilmSlotList() {
+  elements.filmSlotList.replaceChildren();
+  if (!state.filmStrip) return;
+  for (let index = 0; index < state.filmFrameCount; index += 1) {
+    const frame = state.filmFrameImages[index] || null;
+    const row = document.createElement("div");
+    row.className = "film-slot";
+
+    const slotIndex = document.createElement("span");
+    slotIndex.className = "film-slot-index";
+    slotIndex.textContent = String(index + 1).padStart(2, "0");
+
+    const picker = document.createElement("button");
+    picker.className = "film-slot-pick";
+    picker.type = "button";
+    picker.disabled = !state.image;
+    picker.setAttribute("aria-label", `${index + 1}번 칸 사진 선택`);
+    const thumbnail = document.createElement("img");
+    thumbnail.className = "film-slot-thumb";
+    thumbnail.src = frame?.url || state.image?.src || "";
+    thumbnail.alt = "";
+    if (!frame) thumbnail.style.opacity = "0.48";
+    picker.append(thumbnail);
+    picker.addEventListener("click", () => {
+      state.pendingFilmSlot = index;
+      elements.filmSlotInput.click();
+    });
+
+    const name = document.createElement("span");
+    name.className = "film-slot-name";
+    name.textContent = frame?.name || "현재 사진";
+
+    const moveLeft = document.createElement("button");
+    moveLeft.type = "button";
+    moveLeft.textContent = "←";
+    moveLeft.disabled = !frame || index === 0;
+    moveLeft.setAttribute("aria-label", `${index + 1}번 사진 왼쪽으로`);
+    moveLeft.addEventListener("click", () => moveFilmFrame(index, index - 1));
+
+    const moveRight = document.createElement("button");
+    moveRight.type = "button";
+    moveRight.textContent = "→";
+    moveRight.disabled = !frame || index === state.filmFrameCount - 1;
+    moveRight.setAttribute("aria-label", `${index + 1}번 사진 오른쪽으로`);
+    moveRight.addEventListener("click", () => moveFilmFrame(index, index + 1));
+
+    const clear = document.createElement("button");
+    clear.type = "button";
+    clear.textContent = "×";
+    clear.disabled = !frame;
+    clear.setAttribute("aria-label", `${index + 1}번 사진 비우기`);
+    clear.addEventListener("click", () => clearFilmSlot(index));
+
+    row.append(slotIndex, picker, name, moveLeft, moveRight, clear);
+    elements.filmSlotList.append(row);
+  }
+}
+
+function moveFilmFrame(from, to) {
+  if (to < 0 || to >= state.filmFrameCount) return;
+  [state.filmFrameImages[from], state.filmFrameImages[to]] = [state.filmFrameImages[to], state.filmFrameImages[from]];
+  updateOverlayUI();
+  scheduleRender();
+}
+
+function clearFilmSlot(index) {
+  releaseFilmFrame(state.filmFrameImages[index]);
+  state.filmFrameImages[index] = null;
+  updateOverlayUI();
+  scheduleRender();
+}
+
+function decodeFilmFrame(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    filmFrameUrls.add(url);
+    const image = new Image();
+    image.decoding = "async";
+    image.onload = () => resolve({ image, name: file.name, url });
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      filmFrameUrls.delete(url);
+      reject(new Error(`Could not load ${file.name}`));
+    };
+    image.src = url;
+  });
 }
 
 function loadFilmFrameImages(fileList) {
@@ -1309,20 +1446,9 @@ function loadFilmFrameImages(fileList) {
     return;
   }
   clearFilmFrameImages();
-  Promise.all(files.map((file) => new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    filmFrameUrls.add(url);
-    const image = new Image();
-    image.decoding = "async";
-    image.onload = () => resolve({ image, name: file.name, url });
-    image.onerror = () => {
-      URL.revokeObjectURL(url);
-      filmFrameUrls.delete(url);
-      reject(new Error(`Could not load ${file.name}`));
-    };
-    image.src = url;
-  }))).then((frames) => {
+  Promise.all(files.map(decodeFilmFrame)).then((frames) => {
     state.filmFrameImages = frames;
+    state.filmFrameCount = Math.max(state.filmFrameCount, frames.length);
     updateOverlayUI();
     scheduleRender();
     showToast(`${frames.length}장을 필름 칸에 넣었어요.`);
@@ -1332,8 +1458,29 @@ function loadFilmFrameImages(fileList) {
   });
 }
 
+function loadFilmSlotImage(file, index) {
+  if (!file || !file.type.startsWith("image/") || file.size > 30 * 1024 * 1024) {
+    state.pendingFilmSlot = null;
+    elements.filmSlotInput.value = "";
+    showToast("30MB 이하 이미지 파일을 선택해 주세요.");
+    return;
+  }
+  decodeFilmFrame(file).then((frame) => {
+    releaseFilmFrame(state.filmFrameImages[index]);
+    state.filmFrameImages[index] = frame;
+    state.pendingFilmSlot = null;
+    elements.filmSlotInput.value = "";
+    updateOverlayUI();
+    scheduleRender();
+  }).catch(() => {
+    state.pendingFilmSlot = null;
+    elements.filmSlotInput.value = "";
+    showToast("칸 사진을 읽지 못했어요.");
+  });
+}
+
 function addLiquifyPoint(stroke, point, deltaX, deltaY) {
-  if (liquifyPointCount() >= 60) return false;
+  if (liquifyPointCount() >= 96) return false;
   stroke.points.push({
     x: point.x / elements.canvas.width,
     y: point.y / elements.canvas.height,
@@ -1355,7 +1502,7 @@ function beginLiquifyPaint(event) {
   const point = canvasPointFromEvent(event);
   if (!point) return true;
   const stroke = { points: [] };
-  if (!addLiquifyPoint(stroke, point, 0, 0)) {
+  if (liquifyPointCount() >= 96) {
     event.preventDefault();
     return true;
   }
@@ -1365,12 +1512,14 @@ function beginLiquifyPaint(event) {
     stroke,
     lastX: point.x,
     lastY: point.y,
+    startX: point.x,
+    startY: point.y,
+    moved: false,
   };
   elements.canvas.setPointerCapture(event.pointerId);
   elements.canvas.classList.add("is-painting-liquify");
   event.preventDefault();
   updateLiquifyUI();
-  scheduleRender();
   return true;
 }
 
@@ -1381,12 +1530,28 @@ function moveLiquifyPaint(event) {
   if (!point) return true;
   const deltaX = point.x - painting.lastX;
   const deltaY = point.y - painting.lastY;
-  const minDistance = Math.min(elements.canvas.width, elements.canvas.height)
-    * Math.max(0.012, state.liquifyBrushSize * 0.28);
-  if (Math.hypot(deltaX, deltaY) < minDistance) return true;
-  if (addLiquifyPoint(painting.stroke, point, deltaX, deltaY)) {
+  const distance = Math.hypot(deltaX, deltaY);
+  const spacing = Math.min(elements.canvas.width, elements.canvas.height)
+    * Math.max(0.005, state.liquifyBrushSize * 0.08);
+  if (distance < spacing) return true;
+  const steps = Math.min(10, Math.max(1, Math.ceil(distance / spacing)));
+  let added = false;
+  let previousX = painting.lastX;
+  let previousY = painting.lastY;
+  for (let step = 1; step <= steps; step += 1) {
+    const nextPoint = {
+      x: painting.lastX + deltaX * step / steps,
+      y: painting.lastY + deltaY * step / steps,
+    };
+    if (!addLiquifyPoint(painting.stroke, nextPoint, nextPoint.x - previousX, nextPoint.y - previousY)) break;
+    previousX = nextPoint.x;
+    previousY = nextPoint.y;
+    added = true;
+  }
+  if (added) {
     painting.lastX = point.x;
     painting.lastY = point.y;
+    painting.moved = true;
     scheduleRender();
   }
   event.preventDefault();
@@ -1395,10 +1560,19 @@ function moveLiquifyPaint(event) {
 
 function endLiquifyPaint(event) {
   if (!state.paintingLiquify || state.paintingLiquify.pointerId !== event.pointerId) return false;
+  if (!state.paintingLiquify.moved) {
+    addLiquifyPoint(
+      state.paintingLiquify.stroke,
+      { x: state.paintingLiquify.startX, y: state.paintingLiquify.startY },
+      0,
+      0,
+    );
+  }
   if (elements.canvas.hasPointerCapture(event.pointerId)) elements.canvas.releasePointerCapture(event.pointerId);
   state.paintingLiquify = null;
   elements.canvas.classList.remove("is-painting-liquify");
   updateLiquifyUI();
+  scheduleRender();
   return true;
 }
 
@@ -1499,7 +1673,7 @@ function drawImageCover(ctx, image, x, y, width, height) {
   ctx.drawImage(image, (sourceWidth - sw) / 2, (sourceHeight - sh) / 2, sw, sh, x, y, width, height);
 }
 
-function renderFilmFrame(image, width, height, seed) {
+function renderFilmFrame(image, width, height, seed, originalOnly = false) {
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
@@ -1507,14 +1681,14 @@ function renderFilmFrame(image, width, height, seed) {
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
   const presetName = state.filter === "liquify" && state.liquifyMode === "brush" ? "liquifybrush" : state.filter;
-  ctx.filter = presetFilter(presetName, state.strength);
+  ctx.filter = originalOnly ? "none" : presetFilter(presetName, state.strength);
   drawImageCover(ctx, image, 0, 0, width, height);
   ctx.filter = "none";
-  applySelectedFilter(ctx, canvas, width, height, seed);
+  if (!originalOnly) applySelectedFilter(ctx, canvas, width, height, seed);
   return canvas;
 }
 
-function composeFilmStrip(targetCanvas, maxSide) {
+function composeFilmStrip(targetCanvas, maxSide, originalOnly = false) {
   const baseFrame = snapshotCanvas(targetCanvas);
   const count = state.filmFrameCount;
   const aspect = baseFrame.width / baseFrame.height;
@@ -1558,7 +1732,9 @@ function composeFilmStrip(targetCanvas, maxSide) {
     const x = edge + index * (frameWidth + gap);
     const y = band;
     const custom = state.filmFrameImages[index];
-    const frame = custom ? renderFilmFrame(custom.image, frameWidth, frameHeight, state.seed + index * 131) : baseFrame;
+    const frame = custom
+      ? renderFilmFrame(custom.image, frameWidth, frameHeight, state.seed + index * 131, originalOnly)
+      : baseFrame;
     ctx.save();
     ctx.beginPath();
     ctx.rect(x, y, frameWidth, frameHeight);
@@ -1672,16 +1848,16 @@ function drawCameraUiLayer(ctx, width, height, language) {
 
 function drawCameraOverlay(ctx, width, height) {
   if (state.cameraOverlay === "off") return;
-  if (state.cameraRotation === 90) {
-    ctx.save();
-    ctx.translate(width / 2, height / 2);
-    ctx.rotate(Math.PI / 2);
-    ctx.translate(-height / 2, -width / 2);
-    drawCameraUiLayer(ctx, height, width, state.cameraOverlay);
-    ctx.restore();
-    return;
-  }
-  drawCameraUiLayer(ctx, width, height, state.cameraOverlay);
+  const radians = state.cameraRotation * Math.PI / 180;
+  const quarterTurn = state.cameraRotation % 180 !== 0;
+  const logicalWidth = quarterTurn ? height : width;
+  const logicalHeight = quarterTurn ? width : height;
+  ctx.save();
+  ctx.translate(width / 2, height / 2);
+  ctx.rotate(radians);
+  ctx.translate(-logicalWidth / 2, -logicalHeight / 2);
+  drawCameraUiLayer(ctx, logicalWidth, logicalHeight, state.cameraOverlay);
+  ctx.restore();
 }
 
 function drawProcessed(targetCanvas, maxSide = 1500, originalOnly = false) {
@@ -1712,11 +1888,10 @@ function drawProcessed(targetCanvas, maxSide = 1500, originalOnly = false) {
   );
   ctx.filter = "none";
 
-  if (originalOnly) return output;
-
-  applySelectedFilter(ctx, targetCanvas, output.width, output.height, state.seed);
+  if (!originalOnly) applySelectedFilter(ctx, targetCanvas, output.width, output.height, state.seed);
   let finalOutput = output;
-  if (state.filmStrip) finalOutput = composeFilmStrip(targetCanvas, maxSide);
+  if (state.filmStrip) finalOutput = composeFilmStrip(targetCanvas, maxSide, originalOnly);
+  if (originalOnly) return finalOutput;
   const finalCtx = targetCanvas.getContext("2d", { willReadFrequently: true });
   const showStickerSelection = targetCanvas === elements.canvas
     && !(state.filter === "liquify" && state.liquifyMode === "brush");
@@ -1732,7 +1907,8 @@ function scheduleRender() {
   if (state.renderFrame) cancelAnimationFrame(state.renderFrame);
   elements.processing.hidden = false;
   state.renderFrame = requestAnimationFrame(() => {
-    const output = drawProcessed(elements.canvas, 1500, state.comparing);
+    const previewMaxSide = state.paintingLiquify ? 680 : 1500;
+    const output = drawProcessed(elements.canvas, previewMaxSide, state.comparing);
     elements.statusSize.textContent = `${output.width} × ${output.height} PX`;
     elements.processing.hidden = true;
     state.renderFrame = null;
@@ -1821,6 +1997,14 @@ function setComparing(active) {
   state.comparing = active;
   elements.compareButton.setAttribute("aria-pressed", String(active));
   elements.compareButton.classList.toggle("is-active", active);
+  if (active) {
+    if (state.renderFrame) cancelAnimationFrame(state.renderFrame);
+    state.renderFrame = null;
+    const output = drawProcessed(elements.canvas, 1500, true);
+    elements.statusSize.textContent = `${output.width} × ${output.height} PX`;
+    elements.processing.hidden = true;
+    return;
+  }
   scheduleRender();
 }
 
@@ -2011,6 +2195,12 @@ elements.dateToggle.addEventListener("change", () => {
   scheduleRender();
 });
 
+elements.dateInput.addEventListener("input", () => {
+  state.dateValue = elements.dateInput.value || formatDateInputValue(new Date());
+  elements.dateInput.value = state.dateValue;
+  scheduleRender();
+});
+
 elements.cameraOverlayButtons.forEach((button) => {
   button.addEventListener("click", () => {
     state.cameraOverlay = button.dataset.cameraOverlay;
@@ -2024,8 +2214,14 @@ elements.cameraOverlayButtons.forEach((button) => {
   });
 });
 
-elements.rotateCameraOverlay.addEventListener("click", () => {
-  state.cameraRotation = state.cameraRotation === 90 ? 0 : 90;
+elements.rotateCameraLeft.addEventListener("click", () => {
+  state.cameraRotation = (state.cameraRotation + 270) % 360;
+  updateOverlayUI();
+  scheduleRender();
+});
+
+elements.rotateCameraRight.addEventListener("click", () => {
+  state.cameraRotation = (state.cameraRotation + 90) % 360;
   updateOverlayUI();
   scheduleRender();
 });
@@ -2051,6 +2247,10 @@ elements.filmFrameCount.addEventListener("input", () => {
 
 elements.uploadFilmFrames.addEventListener("click", () => elements.filmFrameInput.click());
 elements.filmFrameInput.addEventListener("change", () => loadFilmFrameImages(elements.filmFrameInput.files));
+elements.filmSlotInput.addEventListener("change", () => {
+  if (state.pendingFilmSlot === null) return;
+  loadFilmSlotImage(elements.filmSlotInput.files[0], state.pendingFilmSlot);
+});
 elements.clearFilmFrames.addEventListener("click", () => {
   clearFilmFrameImages();
   scheduleRender();
@@ -2122,6 +2322,7 @@ elements.downloadButton.addEventListener("click", downloadImage);
 
 setRangeFill(elements.strengthRange);
 setRangeFill(elements.grainRange);
+elements.dateInput.value = state.dateValue;
 setNormalizedRangeFill(elements.liquifyBrushSize);
 setNormalizedRangeFill(elements.patternPhase);
 setNormalizedRangeFill(elements.filmFrameCount);

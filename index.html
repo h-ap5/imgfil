@@ -221,7 +221,7 @@
               </label>
 
               <label class="range-control" for="grain-range">
-                <span><strong>입자감</strong><output id="grain-value">24%</output></span>
+                <span><strong>입자감 · 노이즈</strong><output id="grain-value">24%</output></span>
                 <input id="grain-range" type="range" min="0" max="100" value="24" />
               </label>
 
@@ -264,8 +264,12 @@
               </fieldset>
 
               <label class="toggle-row" for="date-toggle">
-                <span><strong>날짜 스탬프</strong><small>사진 아래에 오늘 날짜 새기기</small></span>
+                <span><strong>날짜 스탬프</strong><small>사진 오른쪽 아래에 표시</small></span>
                 <span class="switch"><input id="date-toggle" type="checkbox" /><span aria-hidden="true"></span></span>
+              </label>
+              <label class="date-input-row" for="date-input">
+                <span>날짜</span>
+                <input id="date-input" type="date" />
               </label>
             </section>
 
@@ -279,7 +283,11 @@
                   <button type="button" data-camera-overlay="ko" aria-pressed="false">한국어</button>
                   <button type="button" data-camera-overlay="en" aria-pressed="false">EN</button>
                 </div>
-                <button id="rotate-camera-overlay" class="compact-action" type="button" disabled>90° 회전</button>
+                <div class="camera-rotation-actions">
+                  <button id="rotate-camera-left" class="compact-action" type="button" disabled>↶ 90°</button>
+                  <output id="camera-rotation-value">0°</output>
+                  <button id="rotate-camera-right" class="compact-action" type="button" disabled>90° ↷</button>
+                </div>
               </fieldset>
 
               <fieldset class="ratio-control overlay-control">
@@ -294,11 +302,13 @@
                     <input id="film-frame-count" type="range" min="2" max="6" value="2" />
                   </label>
                   <input id="film-frame-input" type="file" accept="image/jpeg,image/png,image/webp" multiple hidden />
+                  <input id="film-slot-input" type="file" accept="image/jpeg,image/png,image/webp" hidden />
                   <div class="film-frame-actions">
                     <button id="upload-film-frames" class="compact-action" type="button" disabled>칸별 사진</button>
                     <button id="clear-film-frames" class="compact-action" type="button" disabled>비우기</button>
                   </div>
                   <p id="film-frame-status">현재 사진 반복</p>
+                  <div id="film-slot-list" class="film-slot-list" aria-label="필름 칸 순서"></div>
                 </div>
               </fieldset>
             </section>
