@@ -649,7 +649,7 @@ h2 {
 
 .sticker-tabs {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 2px;
   padding: 2px;
   border-top: 2px solid var(--border-light);
@@ -721,6 +721,16 @@ h2 {
 
 .sticker-choice[data-group="pixel"] img {
   image-rendering: pixelated;
+}
+
+.sticker-empty {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 16px 8px;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-align: center;
 }
 
 .sticker-tools {

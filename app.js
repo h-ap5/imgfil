@@ -25,6 +25,8 @@ const elements = {
   toast: $("#toast"),
   stickerTray: $("#sticker-tray"),
   stickerTabs: $$('[data-sticker-group]'),
+  uploadSticker: $("#upload-sticker"),
+  stickerFileInput: $("#sticker-file-input"),
   randomStickers: $("#random-stickers"),
   clearStickers: $("#clear-stickers"),
   stickerTools: $("#sticker-tools"),
@@ -51,11 +53,14 @@ const state = {
   selectedStickerId: null,
   draggingSticker: null,
   stickerCounter: 0,
+  customStickerCounter: 0,
 };
 
 const stickerCatalog = window.STICKER_CATALOG || [];
+const customStickerCatalog = [];
 const stickerDefinitions = new Map(stickerCatalog.map((sticker) => [sticker.id, sticker]));
 const stickerAssets = new Map();
+const customStickerUrls = new Set();
 
 const filterNames = {
   softcam: "흐릿한 아이폰",
@@ -608,7 +613,12 @@ function stickerDataUrl(svg) {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
+function allStickerDefinitions() {
+  return [...stickerCatalog, ...customStickerCatalog];
+}
+
 function stickerBaseScale(sticker) {
+  if (sticker?.group === "custom") return 0.24;
   return sticker?.group === "pixel" ? 0.2 : 0.18;
 }
 
@@ -628,7 +638,15 @@ function initializeStickerAssets() {
 
 function renderStickerTray() {
   elements.stickerTray.replaceChildren();
-  const visibleStickers = stickerCatalog.filter((sticker) => sticker.group === state.stickerGroup);
+  const visibleStickers = allStickerDefinitions().filter((sticker) => sticker.group === state.stickerGroup);
+  if (visibleStickers.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "sticker-empty";
+    empty.textContent = "내 이미지를 추가하세요";
+    elements.stickerTray.append(empty);
+    updateStickerUI();
+    return;
+  }
   visibleStickers.forEach((sticker) => {
     const button = document.createElement("button");
     button.className = "sticker-choice";
@@ -638,7 +656,7 @@ function renderStickerTray() {
     button.setAttribute("aria-label", `${sticker.label} 추가`);
     button.disabled = !state.image;
     const image = document.createElement("img");
-    image.src = stickerDataUrl(sticker.svg);
+    image.src = sticker.src || stickerDataUrl(sticker.svg);
     image.alt = "";
     image.loading = "eager";
     button.append(image);
@@ -660,7 +678,9 @@ function setNormalizedRangeFill(input) {
 
 function updateStickerUI() {
   const selected = selectedSticker();
-  elements.randomStickers.disabled = !state.image;
+  const groupHasStickers = allStickerDefinitions().some((sticker) => sticker.group === state.stickerGroup);
+  elements.uploadSticker.disabled = !state.image;
+  elements.randomStickers.disabled = !state.image || !groupHasStickers;
   elements.clearStickers.disabled = !state.image || state.stickers.length === 0;
   $$(".sticker-choice", elements.stickerTray).forEach((button) => {
     button.disabled = !state.image;
@@ -676,6 +696,60 @@ function updateStickerUI() {
   elements.stickerRotationValue.textContent = `${degrees}°`;
   setNormalizedRangeFill(elements.stickerSize);
   setNormalizedRangeFill(elements.stickerRotation);
+}
+
+function selectStickerGroup(group) {
+  state.stickerGroup = group;
+  elements.stickerTabs.forEach((button) => {
+    const selected = button.dataset.stickerGroup === group;
+    button.classList.toggle("is-selected", selected);
+    button.setAttribute("aria-selected", String(selected));
+  });
+  renderStickerTray();
+}
+
+function loadCustomSticker(file) {
+  if (!state.image) {
+    showToast("사진을 먼저 불러와 주세요.");
+    return;
+  }
+  if (!file || !file.type.startsWith("image/")) {
+    showToast("PNG, WEBP, JPG 또는 SVG 이미지를 선택해 주세요.");
+    return;
+  }
+  if (file.size > 15 * 1024 * 1024) {
+    showToast("스티커 이미지는 15MB보다 작아야 해요.");
+    return;
+  }
+
+  const url = URL.createObjectURL(file);
+  const image = new Image();
+  image.decoding = "async";
+  image.onload = () => {
+    const id = `custom-${++state.customStickerCounter}`;
+    const label = file.name.replace(/\.[^/.]+$/, "") || `내 스티커 ${state.customStickerCounter}`;
+    const definition = {
+      id,
+      label,
+      group: "custom",
+      src: url,
+      aspect: image.naturalWidth / image.naturalHeight,
+    };
+    customStickerUrls.add(url);
+    customStickerCatalog.push(definition);
+    stickerDefinitions.set(id, definition);
+    stickerAssets.set(id, image);
+    selectStickerGroup("custom");
+    addSticker(id);
+    elements.stickerFileInput.value = "";
+    showToast("내 이미지를 스티커로 추가했어요.");
+  };
+  image.onerror = () => {
+    URL.revokeObjectURL(url);
+    elements.stickerFileInput.value = "";
+    showToast("스티커 이미지를 읽지 못했어요.");
+  };
+  image.src = url;
 }
 
 function makeStickerItem(sticker, x, y, scale = stickerBaseScale(sticker), rotation = 0) {
@@ -712,7 +786,8 @@ function addSticker(assetId) {
 
 function randomizeStickers() {
   if (!state.image) return;
-  const pack = stickerCatalog.filter((sticker) => sticker.group === state.stickerGroup);
+  const pack = allStickerDefinitions().filter((sticker) => sticker.group === state.stickerGroup);
+  if (pack.length === 0) return;
   const shuffled = [...pack].sort(() => Math.random() - 0.5).slice(0, Math.min(6, pack.length));
   const positions = [
     [0.2, 0.22], [0.5, 0.18], [0.79, 0.26],
@@ -750,8 +825,12 @@ function deleteSelectedSticker() {
   scheduleRender();
 }
 
-function stickerPixelSize(sticker, width, height) {
-  return Math.min(width, height) * sticker.scale;
+function stickerPixelDimensions(sticker, width, height) {
+  const definition = stickerDefinitions.get(sticker.assetId);
+  const aspect = Math.max(0.08, Math.min(12, definition?.aspect || 1));
+  const maxSize = Math.min(width, height) * sticker.scale;
+  if (aspect >= 1) return { width: maxSize, height: maxSize / aspect };
+  return { width: maxSize * aspect, height: maxSize };
 }
 
 function drawStickers(ctx, width, height, showSelection) {
@@ -760,28 +839,44 @@ function drawStickers(ctx, width, height, showSelection) {
     const definition = stickerDefinitions.get(sticker.assetId);
     const asset = stickerAssets.get(sticker.assetId);
     if (!definition || !asset?.complete || !asset.naturalWidth) return;
-    const size = stickerPixelSize(sticker, width, height);
+    const dimensions = stickerPixelDimensions(sticker, width, height);
     ctx.save();
     ctx.translate(sticker.x * width, sticker.y * height);
     ctx.rotate(sticker.rotation);
     ctx.imageSmoothingEnabled = definition.group !== "pixel";
     if (ctx.imageSmoothingEnabled) ctx.imageSmoothingQuality = "high";
-    ctx.drawImage(asset, -size / 2, -size / 2, size, size);
+    ctx.drawImage(asset, -dimensions.width / 2, -dimensions.height / 2, dimensions.width, dimensions.height);
 
     if (showSelection && sticker.uid === state.selectedStickerId) {
       const lineWidth = Math.max(2, Math.min(width, height) * 0.0025);
       const handle = Math.max(7, Math.min(width, height) * 0.009);
+      const deleteHandle = Math.max(20, Math.min(width, height) * 0.03);
       ctx.setLineDash([lineWidth * 3, lineWidth * 2]);
       ctx.lineWidth = lineWidth;
       ctx.strokeStyle = "#77d5dc";
-      ctx.strokeRect(-size / 2, -size / 2, size, size);
+      ctx.strokeRect(-dimensions.width / 2, -dimensions.height / 2, dimensions.width, dimensions.height);
       ctx.setLineDash([]);
       ctx.fillStyle = "#f08abc";
       ctx.strokeStyle = "#171827";
-      [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([x, y]) => {
-        ctx.fillRect(x * size / 2 - handle / 2, y * size / 2 - handle / 2, handle, handle);
-        ctx.strokeRect(x * size / 2 - handle / 2, y * size / 2 - handle / 2, handle, handle);
+      [[-1, -1], [-1, 1], [1, 1]].forEach(([x, y]) => {
+        const handleX = x * dimensions.width / 2;
+        const handleY = y * dimensions.height / 2;
+        ctx.fillRect(handleX - handle / 2, handleY - handle / 2, handle, handle);
+        ctx.strokeRect(handleX - handle / 2, handleY - handle / 2, handle, handle);
       });
+      const deleteX = dimensions.width / 2;
+      const deleteY = -dimensions.height / 2;
+      ctx.fillStyle = "#ef6b67";
+      ctx.fillRect(deleteX - deleteHandle / 2, deleteY - deleteHandle / 2, deleteHandle, deleteHandle);
+      ctx.strokeRect(deleteX - deleteHandle / 2, deleteY - deleteHandle / 2, deleteHandle, deleteHandle);
+      ctx.strokeStyle = "#171827";
+      ctx.lineWidth = Math.max(2, lineWidth * 1.25);
+      ctx.beginPath();
+      ctx.moveTo(deleteX - deleteHandle * 0.22, deleteY - deleteHandle * 0.22);
+      ctx.lineTo(deleteX + deleteHandle * 0.22, deleteY + deleteHandle * 0.22);
+      ctx.moveTo(deleteX + deleteHandle * 0.22, deleteY - deleteHandle * 0.22);
+      ctx.lineTo(deleteX - deleteHandle * 0.22, deleteY + deleteHandle * 0.22);
+      ctx.stroke();
     }
     ctx.restore();
   });
@@ -805,22 +900,41 @@ function canvasPointFromEvent(event) {
 function findStickerAt(point) {
   for (let index = state.stickers.length - 1; index >= 0; index -= 1) {
     const sticker = state.stickers[index];
-    const size = stickerPixelSize(sticker, elements.canvas.width, elements.canvas.height);
+    const dimensions = stickerPixelDimensions(sticker, elements.canvas.width, elements.canvas.height);
     const dx = point.x - sticker.x * elements.canvas.width;
     const dy = point.y - sticker.y * elements.canvas.height;
     const cos = Math.cos(-sticker.rotation);
     const sin = Math.sin(-sticker.rotation);
     const localX = dx * cos - dy * sin;
     const localY = dx * sin + dy * cos;
-    if (Math.abs(localX) <= size / 2 && Math.abs(localY) <= size / 2) return sticker;
+    if (Math.abs(localX) <= dimensions.width / 2 && Math.abs(localY) <= dimensions.height / 2) return sticker;
   }
   return null;
+}
+
+function isDeleteHandleHit(point) {
+  const sticker = selectedSticker();
+  if (!sticker) return false;
+  const dimensions = stickerPixelDimensions(sticker, elements.canvas.width, elements.canvas.height);
+  const localX = dimensions.width / 2;
+  const localY = -dimensions.height / 2;
+  const cos = Math.cos(sticker.rotation);
+  const sin = Math.sin(sticker.rotation);
+  const handleX = sticker.x * elements.canvas.width + localX * cos - localY * sin;
+  const handleY = sticker.y * elements.canvas.height + localX * sin + localY * cos;
+  const radius = Math.max(16, Math.min(elements.canvas.width, elements.canvas.height) * 0.022);
+  return Math.hypot(point.x - handleX, point.y - handleY) <= radius;
 }
 
 function beginStickerDrag(event) {
   if (!state.image || event.button !== 0 || state.comparing) return;
   const point = canvasPointFromEvent(event);
   if (!point) return;
+  if (isDeleteHandleHit(point)) {
+    event.preventDefault();
+    deleteSelectedSticker();
+    return;
+  }
   const hit = findStickerAt(point);
   if (!hit) {
     if (state.selectedStickerId) {
@@ -856,9 +970,9 @@ function moveSticker(event) {
   const point = canvasPointFromEvent(event);
   const sticker = state.stickers.find((item) => item.uid === drag.uid);
   if (!point || !sticker) return;
-  const size = stickerPixelSize(sticker, elements.canvas.width, elements.canvas.height);
-  const halfX = size / 2 / elements.canvas.width;
-  const halfY = size / 2 / elements.canvas.height;
+  const dimensions = stickerPixelDimensions(sticker, elements.canvas.width, elements.canvas.height);
+  const halfX = dimensions.width / 2 / elements.canvas.width;
+  const halfY = dimensions.height / 2 / elements.canvas.height;
   sticker.x = clamp((point.x - drag.offsetX) / elements.canvas.width, halfX * 0.45, 1 - halfX * 0.45);
   sticker.y = clamp((point.y - drag.offsetY) / elements.canvas.height, halfY * 0.45, 1 - halfY * 0.45);
   event.preventDefault();
@@ -1164,16 +1278,12 @@ elements.dateToggle.addEventListener("change", () => {
 
 elements.stickerTabs.forEach((button) => {
   button.addEventListener("click", () => {
-    state.stickerGroup = button.dataset.stickerGroup;
-    elements.stickerTabs.forEach((item) => {
-      const selected = item === button;
-      item.classList.toggle("is-selected", selected);
-      item.setAttribute("aria-selected", String(selected));
-    });
-    renderStickerTray();
+    selectStickerGroup(button.dataset.stickerGroup);
   });
 });
 
+elements.uploadSticker.addEventListener("click", () => elements.stickerFileInput.click());
+elements.stickerFileInput.addEventListener("change", () => loadCustomSticker(elements.stickerFileInput.files[0]));
 elements.randomStickers.addEventListener("click", randomizeStickers);
 elements.clearStickers.addEventListener("click", clearStickers);
 elements.deleteSticker.addEventListener("click", deleteSelectedSticker);
@@ -1208,6 +1318,10 @@ window.addEventListener("keydown", (event) => {
   if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
   event.preventDefault();
   deleteSelectedSticker();
+});
+
+window.addEventListener("beforeunload", () => {
+  customStickerUrls.forEach((url) => URL.revokeObjectURL(url));
 });
 
 ["pointerdown", "keydown"].forEach((type) => {

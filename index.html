@@ -174,14 +174,18 @@
               <div class="section-title-row sticker-title-row">
                 <h2 id="sticker-title">스티커</h2>
                 <div class="sticker-actions">
+                  <button id="upload-sticker" type="button" disabled>내 이미지</button>
                   <button id="random-stickers" type="button" disabled>랜덤</button>
-                  <button id="clear-stickers" type="button" disabled>지우기</button>
+                  <button id="clear-stickers" type="button" disabled>전체삭제</button>
                 </div>
               </div>
+
+              <input id="sticker-file-input" type="file" accept="image/png,image/webp,image/jpeg,image/svg+xml" hidden />
 
               <div class="sticker-tabs" role="tablist" aria-label="스티커 팩">
                 <button class="is-selected" type="button" role="tab" aria-selected="true" data-sticker-group="holo">홀로</button>
                 <button type="button" role="tab" aria-selected="false" data-sticker-group="pixel">픽셀</button>
+                <button type="button" role="tab" aria-selected="false" data-sticker-group="custom">내꺼</button>
               </div>
               <div id="sticker-tray" class="sticker-tray" aria-label="스티커 목록"></div>
 
