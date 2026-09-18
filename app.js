@@ -24,6 +24,10 @@ const elements = {
   liquifyBrushSizeValue: $("#liquify-brush-size-value"),
   undoLiquify: $("#undo-liquify"),
   clearLiquify: $("#clear-liquify"),
+  patternControls: $("#pattern-controls"),
+  patternPhase: $("#pattern-phase"),
+  patternPhaseValue: $("#pattern-phase-value"),
+  randomizePattern: $("#randomize-pattern"),
   ratioButtons: $$("[data-ratio]"),
   formatButtons: $$('[data-format]'),
   dateToggle: $("#date-toggle"),
@@ -43,6 +47,16 @@ const elements = {
   stickerRotation: $("#sticker-rotation"),
   stickerRotationValue: $("#sticker-rotation-value"),
   deleteSticker: $("#delete-sticker"),
+  cameraOverlayButtons: $$('[data-camera-overlay]'),
+  rotateCameraOverlay: $("#rotate-camera-overlay"),
+  filmStripButtons: $$('[data-film-strip]'),
+  filmStripTools: $("#film-strip-tools"),
+  filmFrameCount: $("#film-frame-count"),
+  filmFrameCountValue: $("#film-frame-count-value"),
+  filmFrameInput: $("#film-frame-input"),
+  uploadFilmFrames: $("#upload-film-frames"),
+  clearFilmFrames: $("#clear-film-frames"),
+  filmFrameStatus: $("#film-frame-status"),
 };
 
 const state = {
@@ -66,7 +80,13 @@ const state = {
   liquifyBrushSize: 0.18,
   liquifyStrokes: [],
   paintingLiquify: null,
+  patternPhase: 0,
   exportFormat: "png",
+  cameraOverlay: "off",
+  cameraRotation: 0,
+  filmStrip: false,
+  filmFrameCount: 2,
+  filmFrameImages: [],
 };
 
 const stickerCatalog = window.STICKER_CATALOG || [];
@@ -74,6 +94,7 @@ const customStickerCatalog = [];
 const stickerDefinitions = new Map(stickerCatalog.map((sticker) => [sticker.id, sticker]));
 const stickerAssets = new Map();
 const customStickerUrls = new Set();
+const filmFrameUrls = new Set();
 
 const filterNames = {
   softcam: "흐릿한 아이폰",
@@ -88,8 +109,10 @@ const filterNames = {
   thermal: "열화상 블룸",
   xerox: "복사기 레이브",
   riso: "리소 어긋남",
-  comic: "셀 만화",
+  comic: "흑백 만화",
   holo: "홀로 드림",
+  pixel: "픽셀 블록",
+  summerfilm: "청량 필름",
 };
 
 function clamp(value, min = 0, max = 255) {
@@ -165,8 +188,10 @@ function presetFilter(name, strength) {
     signal: `brightness(${1 - 0.04 * s}) contrast(${1 + 0.2 * s}) saturate(${1 + 0.28 * s})`,
     frameecho: `brightness(${1 - 0.03 * s}) contrast(${1 + 0.12 * s}) saturate(${1 + 0.18 * s})`,
     prism: `brightness(${1 + 0.08 * s}) contrast(${1 - 0.12 * s}) saturate(${1 + 0.12 * s})`,
-    comic: `brightness(${1 + 0.02 * s}) contrast(${1 + 0.12 * s}) saturate(${1 + 0.3 * s})`,
-    holo: `brightness(${1 + 0.1 * s}) contrast(${1 - 0.22 * s}) saturate(${1 - 0.12 * s}) blur(${0.28 * s}px)`,
+    comic: `brightness(${1 + 0.02 * s}) contrast(${1 + 0.16 * s}) grayscale(1)`,
+    holo: `brightness(${1 + 0.05 * s}) contrast(${1 + 0.03 * s}) saturate(${1 - 0.06 * s})`,
+    pixel: `brightness(${1 + 0.015 * s}) contrast(${1 + 0.08 * s}) saturate(${1 + 0.12 * s})`,
+    summerfilm: `brightness(${1 + 0.08 * s}) contrast(${1 + 0.09 * s}) saturate(${1 + 0.34 * s}) hue-rotate(${-3 * s}deg)`,
   };
   return filters[name] || "none";
 }
@@ -259,13 +284,13 @@ function addScanlines(ctx, width, height, strength) {
   ctx.restore();
 }
 
-function applyNeonLiquify(ctx, width, height, strength, seed) {
+function applyNeonLiquify(ctx, width, height, strength, seed, phaseOffset = 0) {
   strength = softenedLiquifyStrength(strength);
   if (strength <= 0.01) return;
   const imageData = ctx.getImageData(0, 0, width, height);
   const source = new Uint8ClampedArray(imageData.data);
   const data = imageData.data;
-  const phase = (seed % 997) / 997 * Math.PI * 2;
+  const phase = (seed % 997) / 997 * Math.PI * 2 + phaseOffset;
   const horizontalAmp = width * (0.025 + strength * 0.11);
   const verticalAmp = height * (0.025 + strength * 0.19);
   const channelShift = Math.max(1, Math.round(width * (0.004 + strength * 0.014)));
@@ -298,13 +323,13 @@ function applyNeonLiquify(ctx, width, height, strength, seed) {
   addColorWash(ctx, width, height, "#17002e", 0.16 * strength, "multiply");
 }
 
-function applyNeonBrush(ctx, width, height, strength, strokes, seed) {
+function applyNeonBrush(ctx, width, height, strength, strokes, seed, phaseOffset = 0) {
   if (strength <= 0.01 || strokes.length === 0) return;
   const imageData = ctx.getImageData(0, 0, width, height);
   const source = new Uint8ClampedArray(imageData.data);
   const data = imageData.data;
   const minSide = Math.min(width, height);
-  const basePhase = (seed % 991) / 991 * Math.PI * 2;
+  const basePhase = (seed % 991) / 991 * Math.PI * 2 + phaseOffset;
   const effectStrength = 0.38 + softenedLiquifyStrength(strength) * 0.62;
 
   strokes.forEach((stroke, strokeIndex) => {
@@ -362,7 +387,7 @@ function applyNeonBrush(ctx, width, height, strength, strokes, seed) {
   ctx.putImageData(imageData, 0, 0);
 }
 
-function applySignalCrash(ctx, width, height, strength, seed) {
+function applySignalCrash(ctx, width, height, strength, seed, phaseOffset = 0) {
   if (strength <= 0.01) return;
   const imageData = ctx.getImageData(0, 0, width, height);
   const source = new Uint8ClampedArray(imageData.data);
@@ -371,7 +396,8 @@ function applySignalCrash(ctx, width, height, strength, seed) {
   const random = mulberry32(seed + 71);
 
   for (let y = 0; y < height; y += 1) {
-    const lineKick = random() > 0.985 - strength * 0.008 ? Math.round((random() - 0.5) * shift * 6) : 0;
+    const waveKick = Math.sin(y / Math.max(1, height) * Math.PI * 18 + phaseOffset) * shift * strength * 1.4;
+    const lineKick = random() > 0.985 - strength * 0.008 ? Math.round((random() - 0.5) * shift * 6 + waveKick) : Math.round(waveKick);
     for (let x = 0; x < width; x += 1) {
       const target = pixelIndex(x, y, width);
       const redX = Math.round(clamp(x + shift + lineKick, 0, width - 1));
@@ -410,11 +436,12 @@ function applySignalCrash(ctx, width, height, strength, seed) {
   ctx.restore();
 }
 
-function applyFrameEcho(ctx, width, height, strength, seed) {
+function applyFrameEcho(ctx, width, height, strength, seed, phaseOffset = 0) {
   if (strength <= 0.01) return;
   const source = snapshotCanvas(ctx.canvas);
   const random = mulberry32(seed + 191);
-  const distance = width * (0.018 + strength * 0.13);
+  const phaseScale = 0.64 + (Math.sin(phaseOffset) + 1) * 0.28;
+  const distance = width * (0.018 + strength * 0.13) * phaseScale;
 
   ctx.save();
   ctx.globalCompositeOperation = "screen";
@@ -422,7 +449,8 @@ function applyFrameEcho(ctx, width, height, strength, seed) {
     const direction = i % 2 === 0 ? 1 : -1;
     ctx.globalAlpha = (0.055 + strength * 0.045) * (5 - i);
     ctx.filter = `hue-rotate(${direction > 0 ? 165 : -18}deg) saturate(2.1) contrast(1.08)`;
-    ctx.drawImage(source, direction * distance * i * 0.56, 0, width, height);
+    const lift = Math.cos(phaseOffset + i * 0.72) * height * 0.018 * strength;
+    ctx.drawImage(source, direction * distance * i * 0.56, lift, width, height);
   }
   ctx.restore();
 
@@ -475,40 +503,139 @@ function applyPrismEcho(ctx, width, height, strength) {
 
 function applyHoloDream(ctx, width, height, strength) {
   if (strength <= 0.01) return;
-  const source = snapshotCanvas(ctx.canvas);
-  const offset = Math.max(1, width * 0.004 * strength);
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const source = new Uint8ClampedArray(imageData.data);
+  const data = imageData.data;
+  const amount = 0.08 + strength * 0.18;
+
+  for (let y = 0; y < height; y += 1) {
+    const ny = y / Math.max(1, height - 1);
+    for (let x = 0; x < width; x += 1) {
+      const index = pixelIndex(x, y, width);
+      const nx = x / Math.max(1, width - 1);
+      const light = luminance(source, index) / 255;
+      const rose = 0.5 + 0.5 * Math.sin((nx * 1.2 + ny * 0.72) * Math.PI);
+      const tint = [
+        196 + rose * 48,
+        224 - rose * 20 + light * 18,
+        244 + rose * 8,
+      ];
+      const tintAmount = amount * (0.72 + light * 0.28);
+      data[index] = mixChannel(source[index], tint[0], tintAmount);
+      data[index + 1] = mixChannel(source[index + 1], tint[1], tintAmount);
+      data[index + 2] = mixChannel(source[index + 2], tint[2], tintAmount);
+    }
+  }
+  ctx.putImageData(imageData, 0, 0);
 
   ctx.save();
   ctx.globalCompositeOperation = "screen";
-  ctx.globalAlpha = 0.06 + strength * 0.08;
-  ctx.filter = `blur(${Math.max(1, width * 0.004 * strength)}px) hue-rotate(145deg)`;
-  ctx.drawImage(source, offset, -offset * 0.3, width, height);
-  ctx.filter = "none";
 
-  const pearl = ctx.createLinearGradient(0, height, width, 0);
-  pearl.addColorStop(0, "rgba(180,239,255,0.34)");
-  pearl.addColorStop(0.28, "rgba(202,184,255,0.3)");
-  pearl.addColorStop(0.56, "rgba(255,190,226,0.28)");
-  pearl.addColorStop(0.78, "rgba(183,253,241,0.28)");
-  pearl.addColorStop(1, "rgba(222,201,255,0.32)");
-  ctx.globalAlpha = 0.34 + strength * 0.38;
-  ctx.fillStyle = pearl;
+  const skyGlow = ctx.createRadialGradient(width * 0.16, height * 0.22, 0, width * 0.16, height * 0.22, Math.max(width, height) * 0.58);
+  skyGlow.addColorStop(0, `rgba(108,232,255,${0.3 * strength})`);
+  skyGlow.addColorStop(0.48, `rgba(170,212,255,${0.12 * strength})`);
+  skyGlow.addColorStop(1, "rgba(170,212,255,0)");
+  ctx.fillStyle = skyGlow;
   ctx.fillRect(0, 0, width, height);
 
-  const glowA = ctx.createRadialGradient(width * 0.2, height * 0.24, 0, width * 0.2, height * 0.24, width * 0.48);
-  glowA.addColorStop(0, `rgba(135,239,255,${0.34 * strength})`);
-  glowA.addColorStop(1, "rgba(135,239,255,0)");
-  ctx.fillStyle = glowA;
+  const roseGlow = ctx.createRadialGradient(width * 0.86, height * 0.72, 0, width * 0.86, height * 0.72, Math.max(width, height) * 0.52);
+  roseGlow.addColorStop(0, `rgba(255,157,211,${0.25 * strength})`);
+  roseGlow.addColorStop(0.52, `rgba(219,183,255,${0.11 * strength})`);
+  roseGlow.addColorStop(1, "rgba(219,183,255,0)");
+  ctx.fillStyle = roseGlow;
   ctx.fillRect(0, 0, width, height);
 
-  const glowB = ctx.createRadialGradient(width * 0.82, height * 0.74, 0, width * 0.82, height * 0.74, width * 0.5);
-  glowB.addColorStop(0, `rgba(244,172,255,${0.3 * strength})`);
-  glowB.addColorStop(1, "rgba(244,172,255,0)");
-  ctx.fillStyle = glowB;
+  const beam = ctx.createLinearGradient(0, height, width, 0);
+  beam.addColorStop(0, "rgba(123,242,255,0)");
+  beam.addColorStop(0.34, `rgba(197,247,255,${0.14 * strength})`);
+  beam.addColorStop(0.48, `rgba(255,238,251,${0.34 * strength})`);
+  beam.addColorStop(0.61, `rgba(221,191,255,${0.13 * strength})`);
+  beam.addColorStop(1, "rgba(255,183,223,0)");
+  ctx.fillStyle = beam;
+  ctx.beginPath();
+  ctx.moveTo(-width * 0.08, height * 0.66);
+  ctx.lineTo(width * 0.72, -height * 0.08);
+  ctx.lineTo(width * 1.04, height * 0.2);
+  ctx.lineTo(width * 0.2, height * 0.94);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+
+  const sourceCanvas = snapshotCanvas(ctx.canvas);
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  ctx.globalAlpha = 0.035 + strength * 0.045;
+  ctx.filter = `blur(${Math.max(1, width * 0.0022 * strength)}px) brightness(1.14)`;
+  ctx.drawImage(sourceCanvas, 0, 0, width, height);
+  ctx.restore();
+}
+
+function applyPixelate(ctx, width, height, strength) {
+  if (strength <= 0.01) return;
+  const blockSize = 2 + Math.round(strength * 22);
+  const small = document.createElement("canvas");
+  small.width = Math.max(1, Math.ceil(width / blockSize));
+  small.height = Math.max(1, Math.ceil(height / blockSize));
+  const smallCtx = small.getContext("2d");
+  smallCtx.imageSmoothingEnabled = false;
+  smallCtx.drawImage(ctx.canvas, 0, 0, small.width, small.height);
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  ctx.clearRect(0, 0, width, height);
+  ctx.drawImage(small, 0, 0, small.width, small.height, 0, 0, width, height);
+  ctx.restore();
+
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const data = imageData.data;
+  const levels = Math.max(3, 8 - Math.round(strength * 4));
+  const step = 255 / (levels - 1);
+  for (let index = 0; index < data.length; index += 4) {
+    data[index] = Math.round(data[index] / step) * step;
+    data[index + 1] = Math.round(data[index + 1] / step) * step;
+    data[index + 2] = Math.round(data[index + 2] / step) * step;
+  }
+  ctx.putImageData(imageData, 0, 0);
+}
+
+function addVerticalFilmDate(ctx, width, height, strength) {
+  const now = new Date();
+  const date = `${String(now.getFullYear()).slice(-2)}.${String(now.getMonth() + 1).padStart(2, "0")}.${String(now.getDate()).padStart(2, "0")}`;
+  const size = Math.max(12, Math.round(Math.min(width, height) * 0.022));
+  ctx.save();
+  ctx.translate(width * 0.055, height * 0.86);
+  ctx.rotate(-Math.PI / 2);
+  ctx.font = `700 ${size}px "Courier New", monospace`;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = `rgba(255,92,35,${0.62 + strength * 0.32})`;
+  ctx.shadowColor = "rgba(111,21,0,0.45)";
+  ctx.shadowBlur = Math.max(1, size * 0.08);
+  ctx.fillText(date, 0, 0);
+  ctx.restore();
+}
+
+function applySummerFilm(ctx, width, height, strength) {
+  if (strength <= 0.01) return;
+  addColorWash(ctx, width, height, "#8ce7ee", 0.05 * strength, "screen");
+  const leak = ctx.createLinearGradient(width * 0.58, 0, width, 0);
+  leak.addColorStop(0, "rgba(255,70,28,0)");
+  leak.addColorStop(0.55, `rgba(255,126,40,${0.08 * strength})`);
+  leak.addColorStop(0.82, `rgba(255,52,29,${0.28 * strength})`);
+  leak.addColorStop(1, `rgba(158,12,12,${0.38 * strength})`);
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  ctx.fillStyle = leak;
   ctx.fillRect(0, 0, width, height);
   ctx.restore();
 
-  addBloom(ctx, ctx.canvas, width, height, strength * 0.7, "#e9efff");
+  const printFade = ctx.createLinearGradient(0, 0, 0, height);
+  printFade.addColorStop(0, `rgba(15,20,22,${0.13 * strength})`);
+  printFade.addColorStop(0.12, "rgba(15,20,22,0)");
+  printFade.addColorStop(0.86, "rgba(15,20,22,0)");
+  printFade.addColorStop(1, `rgba(15,20,22,${0.16 * strength})`);
+  ctx.fillStyle = printFade;
+  ctx.fillRect(0, 0, width, height);
+  addVerticalFilmDate(ctx, width, height, strength);
 }
 
 function samplePalette(palette, value) {
@@ -608,10 +735,9 @@ function applyComic(ctx, width, height, strength) {
   const source = new Uint8ClampedArray(imageData.data);
   const data = imageData.data;
   const light = new Uint8ClampedArray(width * height);
-  const levels = 4 + Math.round(strength * 2);
-  const step = 255 / Math.max(1, levels - 1);
-  const edgeThreshold = 42 - strength * 18;
-  const amount = 0.38 + strength * 0.62;
+  const edgeThreshold = 48 - strength * 24;
+  const inkThreshold = 66 + strength * 14;
+  const matrix = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
 
   for (let i = 0, p = 0; i < source.length; i += 4, p += 1) light[p] = luminance(source, i);
 
@@ -625,17 +751,14 @@ function applyComic(ctx, width, height, strength) {
       const gx = Math.abs(light[y * width + right] - light[y * width + left]);
       const gy = Math.abs(light[down * width + x] - light[up * width + x]);
       const edge = gx + gy > edgeThreshold;
-      const gray = luminance(source, target);
-      let red = Math.round(source[target] / step) * step;
-      let green = Math.round(source[target + 1] / step) * step;
-      let blue = Math.round(source[target + 2] / step) * step;
-      red = clamp(gray + (red - gray) * 1.45);
-      green = clamp(gray + (green - gray) * 1.45);
-      blue = clamp(gray + (blue - gray) * 1.45);
-      const color = edge ? [18, 18, 24] : [red, green, blue];
-      data[target] = mixChannel(source[target], color[0], amount);
-      data[target + 1] = mixChannel(source[target + 1], color[1], amount);
-      data[target + 2] = mixChannel(source[target + 2], color[2], amount);
+      const gray = clamp((light[y * width + x] - 128) * (1.12 + strength * 0.82) + 138);
+      const screenThreshold = (matrix[(y % 4) * 4 + (x % 4)] + 0.5) / 16 * 255;
+      const shadowInk = gray < inkThreshold;
+      const toneInk = gray < 218 - strength * 20 && screenThreshold > gray + 18;
+      const value = edge || shadowInk || toneInk ? 0 : 255;
+      data[target] = value;
+      data[target + 1] = value;
+      data[target + 2] = value;
     }
   }
   ctx.putImageData(imageData, 0, 0);
@@ -896,6 +1019,7 @@ function clearStickers() {
   state.stickers = [];
   state.selectedStickerId = null;
   state.draggingSticker = null;
+  elements.canvas.classList.remove("is-dragging-sticker", "is-resizing-sticker");
   updateStickerUI();
   scheduleRender();
   showToast("스티커를 모두 지웠어요.");
@@ -906,6 +1030,7 @@ function deleteSelectedSticker() {
   state.stickers = state.stickers.filter((sticker) => sticker.uid !== state.selectedStickerId);
   state.selectedStickerId = null;
   state.draggingSticker = null;
+  elements.canvas.classList.remove("is-dragging-sticker", "is-resizing-sticker");
   updateStickerUI();
   scheduleRender();
 }
@@ -943,12 +1068,26 @@ function drawStickers(ctx, width, height, showSelection) {
       ctx.setLineDash([]);
       ctx.fillStyle = "#f08abc";
       ctx.strokeStyle = "#171827";
-      [[-1, -1], [-1, 1], [1, 1]].forEach(([x, y]) => {
+      [[-1, -1], [-1, 1]].forEach(([x, y]) => {
         const handleX = x * dimensions.width / 2;
         const handleY = y * dimensions.height / 2;
         ctx.fillRect(handleX - handle / 2, handleY - handle / 2, handle, handle);
         ctx.strokeRect(handleX - handle / 2, handleY - handle / 2, handle, handle);
       });
+      const resizeX = dimensions.width / 2;
+      const resizeY = dimensions.height / 2;
+      const resizeHandle = Math.max(handle * 1.65, Math.min(width, height) * 0.024);
+      ctx.fillStyle = "#77d5dc";
+      ctx.fillRect(resizeX - resizeHandle / 2, resizeY - resizeHandle / 2, resizeHandle, resizeHandle);
+      ctx.strokeRect(resizeX - resizeHandle / 2, resizeY - resizeHandle / 2, resizeHandle, resizeHandle);
+      ctx.strokeStyle = "#171827";
+      ctx.lineWidth = Math.max(2, lineWidth);
+      ctx.beginPath();
+      ctx.moveTo(resizeX - resizeHandle * 0.2, resizeY + resizeHandle * 0.32);
+      ctx.lineTo(resizeX + resizeHandle * 0.32, resizeY - resizeHandle * 0.2);
+      ctx.moveTo(resizeX + resizeHandle * 0.02, resizeY + resizeHandle * 0.32);
+      ctx.lineTo(resizeX + resizeHandle * 0.32, resizeY + resizeHandle * 0.02);
+      ctx.stroke();
       const deleteX = dimensions.width / 2;
       const deleteY = -dimensions.height / 2;
       ctx.fillStyle = "#ef6b67";
@@ -1011,10 +1150,40 @@ function isDeleteHandleHit(point) {
   return Math.hypot(point.x - handleX, point.y - handleY) <= radius;
 }
 
+function isResizeHandleHit(point) {
+  const sticker = selectedSticker();
+  if (!sticker) return false;
+  const dimensions = stickerPixelDimensions(sticker, elements.canvas.width, elements.canvas.height);
+  const localX = dimensions.width / 2;
+  const localY = dimensions.height / 2;
+  const cos = Math.cos(sticker.rotation);
+  const sin = Math.sin(sticker.rotation);
+  const handleX = sticker.x * elements.canvas.width + localX * cos - localY * sin;
+  const handleY = sticker.y * elements.canvas.height + localX * sin + localY * cos;
+  const radius = Math.max(16, Math.min(elements.canvas.width, elements.canvas.height) * 0.026);
+  return Math.hypot(point.x - handleX, point.y - handleY) <= radius;
+}
+
 function beginStickerDrag(event) {
   if (!state.image || event.button !== 0 || state.comparing) return;
   const point = canvasPointFromEvent(event);
   if (!point) return;
+  if (isResizeHandleHit(point)) {
+    const sticker = selectedSticker();
+    const centerX = sticker.x * elements.canvas.width;
+    const centerY = sticker.y * elements.canvas.height;
+    state.draggingSticker = {
+      mode: "resize",
+      pointerId: event.pointerId,
+      uid: sticker.uid,
+      startDistance: Math.max(1, Math.hypot(point.x - centerX, point.y - centerY)),
+      startScale: sticker.scale,
+    };
+    elements.canvas.setPointerCapture(event.pointerId);
+    elements.canvas.classList.add("is-resizing-sticker");
+    event.preventDefault();
+    return;
+  }
   if (isDeleteHandleHit(point)) {
     event.preventDefault();
     deleteSelectedSticker();
@@ -1037,6 +1206,7 @@ function beginStickerDrag(event) {
   }
   state.selectedStickerId = hit.uid;
   state.draggingSticker = {
+    mode: "move",
     pointerId: event.pointerId,
     uid: hit.uid,
     offsetX: point.x - hit.x * elements.canvas.width,
@@ -1055,6 +1225,18 @@ function moveSticker(event) {
   const point = canvasPointFromEvent(event);
   const sticker = state.stickers.find((item) => item.uid === drag.uid);
   if (!point || !sticker) return;
+  if (drag.mode === "resize") {
+    const definition = stickerDefinitions.get(sticker.assetId);
+    const centerX = sticker.x * elements.canvas.width;
+    const centerY = sticker.y * elements.canvas.height;
+    const distance = Math.max(1, Math.hypot(point.x - centerX, point.y - centerY));
+    const baseScale = stickerBaseScale(definition);
+    sticker.scale = clamp(drag.startScale * distance / drag.startDistance, baseScale * 0.45, baseScale * 1.9);
+    event.preventDefault();
+    updateStickerUI();
+    scheduleRender();
+    return;
+  }
   const dimensions = stickerPixelDimensions(sticker, elements.canvas.width, elements.canvas.height);
   const halfX = dimensions.width / 2 / elements.canvas.width;
   const halfY = dimensions.height / 2 / elements.canvas.height;
@@ -1069,6 +1251,7 @@ function endStickerDrag(event) {
   if (elements.canvas.hasPointerCapture(event.pointerId)) elements.canvas.releasePointerCapture(event.pointerId);
   state.draggingSticker = null;
   elements.canvas.classList.remove("is-dragging-sticker");
+  elements.canvas.classList.remove("is-resizing-sticker");
 }
 
 function liquifyPointCount() {
@@ -1083,6 +1266,70 @@ function updateLiquifyUI() {
   elements.undoLiquify.disabled = state.liquifyStrokes.length === 0;
   elements.clearLiquify.disabled = state.liquifyStrokes.length === 0;
   elements.canvas.classList.toggle("is-liquify-brush", isBrush && Boolean(state.image));
+}
+
+function updatePatternUI() {
+  const supportsPattern = ["liquify", "signal", "frameecho"].includes(state.filter);
+  elements.patternControls.hidden = !supportsPattern;
+  elements.patternPhase.value = String(state.patternPhase);
+  elements.patternPhaseValue.textContent = `${state.patternPhase}°`;
+  setNormalizedRangeFill(elements.patternPhase);
+}
+
+function updateOverlayUI() {
+  elements.rotateCameraOverlay.disabled = state.cameraOverlay === "off";
+  elements.rotateCameraOverlay.textContent = state.cameraRotation === 90 ? "원위치" : "90° 회전";
+  elements.filmStripTools.hidden = !state.filmStrip;
+  elements.uploadFilmFrames.disabled = !state.image;
+  elements.clearFilmFrames.disabled = state.filmFrameImages.length === 0;
+  elements.filmFrameCount.value = String(state.filmFrameCount);
+  elements.filmFrameCountValue.textContent = `${state.filmFrameCount}칸`;
+  elements.filmFrameStatus.textContent = state.filmFrameImages.length > 0
+    ? `${state.filmFrameImages.length}장 지정 · 나머지는 현재 사진`
+    : "현재 사진 반복";
+  setNormalizedRangeFill(elements.filmFrameCount);
+}
+
+function clearFilmFrameImages() {
+  filmFrameUrls.forEach((url) => URL.revokeObjectURL(url));
+  filmFrameUrls.clear();
+  state.filmFrameImages = [];
+  elements.filmFrameInput.value = "";
+  updateOverlayUI();
+}
+
+function loadFilmFrameImages(fileList) {
+  if (!state.image) {
+    showToast("사진을 먼저 불러와 주세요.");
+    return;
+  }
+  const files = [...fileList].filter((file) => file.type.startsWith("image/")).slice(0, 6);
+  if (files.length === 0 || files.some((file) => file.size > 30 * 1024 * 1024)) {
+    showToast("30MB 이하 이미지 파일을 선택해 주세요.");
+    return;
+  }
+  clearFilmFrameImages();
+  Promise.all(files.map((file) => new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    filmFrameUrls.add(url);
+    const image = new Image();
+    image.decoding = "async";
+    image.onload = () => resolve({ image, name: file.name, url });
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      filmFrameUrls.delete(url);
+      reject(new Error(`Could not load ${file.name}`));
+    };
+    image.src = url;
+  }))).then((frames) => {
+    state.filmFrameImages = frames;
+    updateOverlayUI();
+    scheduleRender();
+    showToast(`${frames.length}장을 필름 칸에 넣었어요.`);
+  }).catch(() => {
+    clearFilmFrameImages();
+    showToast("칸별 사진을 읽지 못했어요.");
+  });
 }
 
 function addLiquifyPoint(stroke, point, deltaX, deltaY) {
@@ -1167,6 +1414,276 @@ function handleCanvasPointerEnd(event) {
   if (!endLiquifyPaint(event)) endStickerDrag(event);
 }
 
+function patternPhaseRadians() {
+  return state.patternPhase * Math.PI / 180;
+}
+
+function applySelectedFilter(ctx, canvas, width, height, seed = state.seed) {
+  const phase = patternPhaseRadians();
+
+  if (state.filter === "softcam") {
+    addBloom(ctx, canvas, width, height, state.strength, "#ffeef5");
+    addColorWash(ctx, width, height, "#f6c9d6", 0.055 * state.strength, "screen");
+    addVignette(ctx, width, height, 0.12 * state.strength);
+  }
+
+  if (state.filter === "y2k") {
+    addColorWash(ctx, width, height, "#d8a72d", 0.2 * state.strength, "color");
+    addFlash(ctx, width, height, 0.42 * state.strength);
+    addVignette(ctx, width, height, 0.32 * state.strength);
+  }
+
+  if (state.filter === "analog") {
+    addColorWash(ctx, width, height, "#523c70", 0.08 * state.strength, "color");
+    addVignette(ctx, width, height, 0.42 * state.strength);
+  }
+
+  if (state.filter === "disposable") {
+    addFlash(ctx, width, height, state.strength);
+    addColorWash(ctx, width, height, "#e77b4d", 0.07 * state.strength, "color");
+    addVignette(ctx, width, height, 0.48 * state.strength);
+  }
+
+  if (state.filter === "ccd") {
+    addBloom(ctx, canvas, width, height, state.strength * 0.58, "#c7dcff");
+    addColorWash(ctx, width, height, "#527cbe", 0.12 * state.strength, "color");
+    addVignette(ctx, width, height, 0.22 * state.strength);
+  }
+
+  if (state.filter === "liquify") {
+    if (state.liquifyMode === "brush") {
+      applyNeonBrush(ctx, width, height, state.strength, state.liquifyStrokes, seed, phase);
+    } else {
+      applyNeonLiquify(ctx, width, height, state.strength, seed, phase);
+      addVignette(ctx, width, height, 0.34 * softenedLiquifyStrength(state.strength));
+    }
+  }
+
+  if (state.filter === "signal") {
+    applySignalCrash(ctx, width, height, state.strength, seed, phase);
+    addVignette(ctx, width, height, 0.22 * state.strength);
+  }
+
+  if (state.filter === "frameecho") {
+    applyFrameEcho(ctx, width, height, state.strength, seed, phase);
+    addVignette(ctx, width, height, 0.18 * state.strength);
+  }
+
+  if (state.filter === "prism") applyPrismEcho(ctx, width, height, state.strength);
+  if (state.filter === "thermal") {
+    applyThermal(ctx, width, height, state.strength);
+    addVignette(ctx, width, height, 0.16 * state.strength);
+  }
+  if (state.filter === "xerox") applyXerox(ctx, width, height, state.strength, seed);
+  if (state.filter === "riso") applyRiso(ctx, width, height, state.strength);
+  if (state.filter === "comic") applyComic(ctx, width, height, state.strength);
+  if (state.filter === "holo") applyHoloDream(ctx, width, height, state.strength);
+  if (state.filter === "pixel") applyPixelate(ctx, width, height, state.strength);
+  if (state.filter === "summerfilm") applySummerFilm(ctx, width, height, state.strength);
+
+  if (state.filter !== "comic") {
+    addPixelEffects(ctx, width, height, state.filter, state.strength, state.grain, seed);
+  }
+  if (state.filter === "analog") addScanlines(ctx, width, height, state.strength);
+}
+
+function drawImageCover(ctx, image, x, y, width, height) {
+  const sourceWidth = image.naturalWidth || image.width;
+  const sourceHeight = image.naturalHeight || image.height;
+  const sourceAspect = sourceWidth / sourceHeight;
+  const targetAspect = width / height;
+  let sw = sourceWidth;
+  let sh = sourceHeight;
+  if (sourceAspect > targetAspect) sw = sourceHeight * targetAspect;
+  else sh = sourceWidth / targetAspect;
+  ctx.drawImage(image, (sourceWidth - sw) / 2, (sourceHeight - sh) / 2, sw, sh, x, y, width, height);
+}
+
+function renderFilmFrame(image, width, height, seed) {
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  const presetName = state.filter === "liquify" && state.liquifyMode === "brush" ? "liquifybrush" : state.filter;
+  ctx.filter = presetFilter(presetName, state.strength);
+  drawImageCover(ctx, image, 0, 0, width, height);
+  ctx.filter = "none";
+  applySelectedFilter(ctx, canvas, width, height, seed);
+  return canvas;
+}
+
+function composeFilmStrip(targetCanvas, maxSide) {
+  const baseFrame = snapshotCanvas(targetCanvas);
+  const count = state.filmFrameCount;
+  const aspect = baseFrame.width / baseFrame.height;
+  const edgeUnits = 0.07;
+  const gapUnits = 0.045;
+  const bandUnits = 0.2;
+  const totalWidthUnits = edgeUnits * 2 + aspect * count + gapUnits * (count - 1);
+  const totalHeightUnits = 1 + bandUnits * 2;
+  const unit = Math.min(baseFrame.height, maxSide / Math.max(totalWidthUnits, totalHeightUnits));
+  const frameWidth = Math.max(1, Math.round(aspect * unit));
+  const frameHeight = Math.max(1, Math.round(unit));
+  const gap = Math.max(2, Math.round(gapUnits * unit));
+  const edge = Math.max(6, Math.round(edgeUnits * unit));
+  const band = Math.max(18, Math.round(bandUnits * unit));
+  const width = edge * 2 + frameWidth * count + gap * (count - 1);
+  const height = frameHeight + band * 2;
+
+  targetCanvas.width = width;
+  targetCanvas.height = height;
+  const ctx = targetCanvas.getContext("2d", { willReadFrequently: true });
+  ctx.fillStyle = "#111014";
+  ctx.fillRect(0, 0, width, height);
+
+  const aged = ctx.createLinearGradient(0, 0, width, height);
+  aged.addColorStop(0, "rgba(98,52,21,0.2)");
+  aged.addColorStop(0.5, "rgba(255,242,190,0.02)");
+  aged.addColorStop(1, "rgba(123,28,9,0.18)");
+  ctx.fillStyle = aged;
+  ctx.fillRect(0, 0, width, height);
+
+  const holeWidth = Math.max(8, Math.round(unit * 0.085));
+  const holeHeight = Math.max(6, Math.round(band * 0.46));
+  const holeGap = Math.max(5, Math.round(holeWidth * 0.62));
+  ctx.fillStyle = "#f0e8cc";
+  for (let x = edge * 0.45; x < width - holeWidth; x += holeWidth + holeGap) {
+    ctx.fillRect(x, (band - holeHeight) / 2, holeWidth, holeHeight);
+    ctx.fillRect(x, height - band + (band - holeHeight) / 2, holeWidth, holeHeight);
+  }
+
+  for (let index = 0; index < count; index += 1) {
+    const x = edge + index * (frameWidth + gap);
+    const y = band;
+    const custom = state.filmFrameImages[index];
+    const frame = custom ? renderFilmFrame(custom.image, frameWidth, frameHeight, state.seed + index * 131) : baseFrame;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x, y, frameWidth, frameHeight);
+    ctx.clip();
+    drawImageCover(ctx, frame, x, y, frameWidth, frameHeight);
+    ctx.restore();
+    ctx.strokeStyle = "rgba(246,224,179,0.28)";
+    ctx.lineWidth = Math.max(1, unit * 0.008);
+    ctx.strokeRect(x + 0.5, y + 0.5, frameWidth - 1, frameHeight - 1);
+  }
+
+  const random = mulberry32(state.seed + count * 41);
+  ctx.save();
+  for (let index = 0; index < Math.round(5 + count * 1.5); index += 1) {
+    ctx.globalAlpha = 0.08 + random() * 0.14;
+    ctx.fillStyle = random() > 0.5 ? "#fff4cf" : "#bd3a18";
+    ctx.fillRect(random() * width, 0, Math.max(1, unit * 0.006), height);
+  }
+  ctx.globalAlpha = 0.72;
+  ctx.fillStyle = "#e9622f";
+  ctx.font = `700 ${Math.max(9, Math.round(band * 0.34))}px "Courier New", monospace`;
+  ctx.textBaseline = "middle";
+  for (let index = 0; index < count; index += 1) {
+    const x = edge + index * (frameWidth + gap) + frameWidth * 0.08;
+    ctx.fillText(String(22 + index), x, band * 0.5);
+  }
+  ctx.restore();
+  return { width, height };
+}
+
+function drawCameraUiLayer(ctx, width, height, language) {
+  const top = height * 0.15;
+  const bottom = height * 0.25;
+  const viewportBottom = height - bottom;
+  const lineWidth = Math.max(1, Math.min(width, height) * 0.0022);
+  ctx.save();
+  ctx.fillStyle = "rgba(2,3,6,0.7)";
+  ctx.fillRect(0, 0, width, top);
+  ctx.fillRect(0, viewportBottom, width, bottom);
+  ctx.strokeStyle = "rgba(235,239,243,0.38)";
+  ctx.lineWidth = lineWidth;
+  for (let index = 1; index < 3; index += 1) {
+    const x = width * index / 3;
+    const y = top + (viewportBottom - top) * index / 3;
+    ctx.beginPath();
+    ctx.moveTo(x, top);
+    ctx.lineTo(x, viewportBottom);
+    ctx.moveTo(0, y);
+    ctx.lineTo(width, y);
+    ctx.stroke();
+  }
+
+  const uiSize = Math.max(11, Math.round(Math.min(width, height) * 0.026));
+  ctx.font = `700 ${uiSize}px Arial, sans-serif`;
+  ctx.fillStyle = "rgba(255,255,255,0.92)";
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "left";
+  ctx.fillText("⚡", width * 0.05, top * 0.48);
+  ctx.fillText("HDR", width * 0.18, top * 0.48);
+  ctx.textAlign = "right";
+  ctx.fillText("AUTO", width * 0.95, top * 0.48);
+
+  const focusX = width * 0.5;
+  const focusY = top + (viewportBottom - top) * 0.5;
+  const focusSize = Math.min(width, height) * 0.045;
+  ctx.strokeStyle = "rgba(245,209,91,0.9)";
+  ctx.lineWidth = Math.max(1.5, lineWidth * 1.4);
+  ctx.beginPath();
+  ctx.moveTo(focusX - focusSize, focusY);
+  ctx.lineTo(focusX + focusSize, focusY);
+  ctx.moveTo(focusX, focusY - focusSize);
+  ctx.lineTo(focusX, focusY + focusSize);
+  ctx.stroke();
+
+  const labels = language === "ko"
+    ? ["슬로모션", "비디오", "사진", "인물", "파노라마"]
+    : ["SLO-MO", "VIDEO", "PHOTO", "PORTRAIT", "PANO"];
+  const selectedIndex = 2;
+  ctx.font = `700 ${Math.max(9, Math.round(uiSize * 0.72))}px Arial, sans-serif`;
+  ctx.textAlign = "center";
+  labels.forEach((label, index) => {
+    const x = width * (0.1 + index * 0.2);
+    ctx.fillStyle = index === selectedIndex ? "#f1ca57" : "rgba(255,255,255,0.78)";
+    ctx.fillText(label, x, viewportBottom + bottom * 0.24);
+  });
+
+  const shutterY = viewportBottom + bottom * 0.68;
+  const shutterRadius = Math.min(width, height) * 0.074;
+  ctx.fillStyle = "#f7f7f7";
+  ctx.strokeStyle = "#ffffff";
+  ctx.lineWidth = Math.max(3, lineWidth * 2.4);
+  ctx.beginPath();
+  ctx.arc(width * 0.5, shutterY, shutterRadius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.strokeStyle = "#101116";
+  ctx.lineWidth = Math.max(1, lineWidth);
+  ctx.beginPath();
+  ctx.arc(width * 0.5, shutterY, shutterRadius * 0.84, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.strokeStyle = "rgba(255,255,255,0.86)";
+  ctx.beginPath();
+  ctx.arc(width * 0.86, shutterY, shutterRadius * 0.72, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.fillStyle = "rgba(255,255,255,0.86)";
+  ctx.font = `700 ${Math.max(12, Math.round(uiSize * 1.1))}px Arial, sans-serif`;
+  ctx.fillText("↻", width * 0.86, shutterY);
+  ctx.restore();
+}
+
+function drawCameraOverlay(ctx, width, height) {
+  if (state.cameraOverlay === "off") return;
+  if (state.cameraRotation === 90) {
+    ctx.save();
+    ctx.translate(width / 2, height / 2);
+    ctx.rotate(Math.PI / 2);
+    ctx.translate(-height / 2, -width / 2);
+    drawCameraUiLayer(ctx, height, width, state.cameraOverlay);
+    ctx.restore();
+    return;
+  }
+  drawCameraUiLayer(ctx, width, height, state.cameraOverlay);
+}
+
 function drawProcessed(targetCanvas, maxSide = 1500, originalOnly = false) {
   if (!state.image) return null;
 
@@ -1195,85 +1712,19 @@ function drawProcessed(targetCanvas, maxSide = 1500, originalOnly = false) {
   );
   ctx.filter = "none";
 
-  if (!originalOnly) {
-    if (state.filter === "softcam") {
-      addBloom(ctx, targetCanvas, output.width, output.height, state.strength, "#ffeef5");
-      addColorWash(ctx, output.width, output.height, "#f6c9d6", 0.055 * state.strength, "screen");
-      addVignette(ctx, output.width, output.height, 0.12 * state.strength);
-    }
+  if (originalOnly) return output;
 
-    if (state.filter === "y2k") {
-      addColorWash(ctx, output.width, output.height, "#d8a72d", 0.2 * state.strength, "color");
-      addFlash(ctx, output.width, output.height, 0.42 * state.strength);
-      addVignette(ctx, output.width, output.height, 0.32 * state.strength);
-    }
+  applySelectedFilter(ctx, targetCanvas, output.width, output.height, state.seed);
+  let finalOutput = output;
+  if (state.filmStrip) finalOutput = composeFilmStrip(targetCanvas, maxSide);
+  const finalCtx = targetCanvas.getContext("2d", { willReadFrequently: true });
+  const showStickerSelection = targetCanvas === elements.canvas
+    && !(state.filter === "liquify" && state.liquifyMode === "brush");
+  drawStickers(finalCtx, finalOutput.width, finalOutput.height, showStickerSelection);
+  if (state.showDate) addDateStamp(finalCtx, finalOutput.width, finalOutput.height);
+  drawCameraOverlay(finalCtx, finalOutput.width, finalOutput.height);
 
-    if (state.filter === "analog") {
-      addColorWash(ctx, output.width, output.height, "#523c70", 0.08 * state.strength, "color");
-      addVignette(ctx, output.width, output.height, 0.42 * state.strength);
-    }
-
-    if (state.filter === "disposable") {
-      addFlash(ctx, output.width, output.height, state.strength);
-      addColorWash(ctx, output.width, output.height, "#e77b4d", 0.07 * state.strength, "color");
-      addVignette(ctx, output.width, output.height, 0.48 * state.strength);
-    }
-
-    if (state.filter === "ccd") {
-      addBloom(ctx, targetCanvas, output.width, output.height, state.strength * 0.58, "#c7dcff");
-      addColorWash(ctx, output.width, output.height, "#527cbe", 0.12 * state.strength, "color");
-      addVignette(ctx, output.width, output.height, 0.22 * state.strength);
-    }
-
-    if (state.filter === "liquify") {
-      if (state.liquifyMode === "brush") {
-        applyNeonBrush(
-          ctx,
-          output.width,
-          output.height,
-          state.strength,
-          state.liquifyStrokes,
-          state.seed,
-        );
-      } else {
-        applyNeonLiquify(ctx, output.width, output.height, state.strength, state.seed);
-        addVignette(ctx, output.width, output.height, 0.34 * softenedLiquifyStrength(state.strength));
-      }
-    }
-
-    if (state.filter === "signal") {
-      applySignalCrash(ctx, output.width, output.height, state.strength, state.seed);
-      addVignette(ctx, output.width, output.height, 0.22 * state.strength);
-    }
-
-    if (state.filter === "frameecho") {
-      applyFrameEcho(ctx, output.width, output.height, state.strength, state.seed);
-      addVignette(ctx, output.width, output.height, 0.18 * state.strength);
-    }
-
-    if (state.filter === "prism") {
-      applyPrismEcho(ctx, output.width, output.height, state.strength);
-    }
-
-    if (state.filter === "thermal") {
-      applyThermal(ctx, output.width, output.height, state.strength);
-      addVignette(ctx, output.width, output.height, 0.16 * state.strength);
-    }
-
-    if (state.filter === "xerox") applyXerox(ctx, output.width, output.height, state.strength, state.seed);
-    if (state.filter === "riso") applyRiso(ctx, output.width, output.height, state.strength);
-    if (state.filter === "comic") applyComic(ctx, output.width, output.height, state.strength);
-    if (state.filter === "holo") applyHoloDream(ctx, output.width, output.height, state.strength);
-
-    addPixelEffects(ctx, output.width, output.height, state.filter, state.strength, state.grain, state.seed);
-    if (state.filter === "analog") addScanlines(ctx, output.width, output.height, state.strength);
-    const showStickerSelection = targetCanvas === elements.canvas
-      && !(state.filter === "liquify" && state.liquifyMode === "brush");
-    drawStickers(ctx, output.width, output.height, showStickerSelection);
-    if (state.showDate) addDateStamp(ctx, output.width, output.height);
-  }
-
-  return output;
+  return finalOutput;
 }
 
 function scheduleRender() {
@@ -1297,6 +1748,7 @@ function updateLoadedUI(file) {
   const sizeMb = file ? `${(file.size / 1024 / 1024).toFixed(1)} MB` : "CLIPBOARD";
   elements.fileMeta.textContent = `${state.fileName.toUpperCase()} · ${state.image.naturalWidth} × ${state.image.naturalHeight} · ${sizeMb}`;
   updateStickerUI();
+  updateOverlayUI();
 }
 
 async function loadFile(file) {
@@ -1323,6 +1775,7 @@ async function loadFile(file) {
     state.draggingSticker = null;
     state.liquifyStrokes = [];
     state.paintingLiquify = null;
+    clearFilmFrameImages();
     updateLoadedUI(file);
     updateLiquifyUI();
     scheduleRender();
@@ -1344,6 +1797,8 @@ function resetEditor() {
   state.draggingSticker = null;
   state.liquifyStrokes = [];
   state.paintingLiquify = null;
+  clearFilmFrameImages();
+  elements.canvas.classList.remove("is-dragging-sticker", "is-resizing-sticker", "is-painting-liquify");
   elements.canvas.width = 0;
   elements.canvas.height = 0;
   elements.emptyState.hidden = false;
@@ -1356,6 +1811,8 @@ function resetEditor() {
   elements.downloadButton.disabled = true;
   updateStickerUI();
   updateLiquifyUI();
+  updatePatternUI();
+  updateOverlayUI();
   showToast("편집기를 비웠어요.");
 }
 
@@ -1459,6 +1916,7 @@ elements.filterCards.forEach((card) => {
       item.setAttribute("aria-checked", String(selected));
     });
     updateLiquifyUI();
+    updatePatternUI();
     scheduleRender();
   });
 });
@@ -1510,6 +1968,20 @@ elements.clearLiquify.addEventListener("click", () => {
   scheduleRender();
 });
 
+elements.patternPhase.addEventListener("input", () => {
+  state.patternPhase = Number(elements.patternPhase.value);
+  elements.patternPhaseValue.textContent = `${state.patternPhase}°`;
+  setNormalizedRangeFill(elements.patternPhase);
+  scheduleRender();
+});
+
+elements.randomizePattern.addEventListener("click", () => {
+  state.seed = Math.floor(Math.random() * 100000);
+  state.patternPhase = Math.floor(Math.random() * 361);
+  updatePatternUI();
+  scheduleRender();
+});
+
 elements.ratioButtons.forEach((button) => {
   button.addEventListener("click", () => {
     state.ratio = button.dataset.ratio;
@@ -1536,6 +2008,51 @@ elements.formatButtons.forEach((button) => {
 
 elements.dateToggle.addEventListener("change", () => {
   state.showDate = elements.dateToggle.checked;
+  scheduleRender();
+});
+
+elements.cameraOverlayButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    state.cameraOverlay = button.dataset.cameraOverlay;
+    elements.cameraOverlayButtons.forEach((item) => {
+      const selected = item === button;
+      item.classList.toggle("is-selected", selected);
+      item.setAttribute("aria-pressed", String(selected));
+    });
+    updateOverlayUI();
+    scheduleRender();
+  });
+});
+
+elements.rotateCameraOverlay.addEventListener("click", () => {
+  state.cameraRotation = state.cameraRotation === 90 ? 0 : 90;
+  updateOverlayUI();
+  scheduleRender();
+});
+
+elements.filmStripButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    state.filmStrip = button.dataset.filmStrip === "on";
+    elements.filmStripButtons.forEach((item) => {
+      const selected = item === button;
+      item.classList.toggle("is-selected", selected);
+      item.setAttribute("aria-pressed", String(selected));
+    });
+    updateOverlayUI();
+    scheduleRender();
+  });
+});
+
+elements.filmFrameCount.addEventListener("input", () => {
+  state.filmFrameCount = Number(elements.filmFrameCount.value);
+  updateOverlayUI();
+  scheduleRender();
+});
+
+elements.uploadFilmFrames.addEventListener("click", () => elements.filmFrameInput.click());
+elements.filmFrameInput.addEventListener("change", () => loadFilmFrameImages(elements.filmFrameInput.files));
+elements.clearFilmFrames.addEventListener("click", () => {
+  clearFilmFrameImages();
   scheduleRender();
 });
 
@@ -1585,6 +2102,7 @@ window.addEventListener("keydown", (event) => {
 
 window.addEventListener("beforeunload", () => {
   customStickerUrls.forEach((url) => URL.revokeObjectURL(url));
+  filmFrameUrls.forEach((url) => URL.revokeObjectURL(url));
 });
 
 ["pointerdown", "keydown"].forEach((type) => {
@@ -1605,6 +2123,10 @@ elements.downloadButton.addEventListener("click", downloadImage);
 setRangeFill(elements.strengthRange);
 setRangeFill(elements.grainRange);
 setNormalizedRangeFill(elements.liquifyBrushSize);
+setNormalizedRangeFill(elements.patternPhase);
+setNormalizedRangeFill(elements.filmFrameCount);
 updateLiquifyUI();
+updatePatternUI();
+updateOverlayUI();
 updateDownloadButtonLabel();
 initializeStickerAssets();
