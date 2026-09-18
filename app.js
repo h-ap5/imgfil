@@ -120,6 +120,9 @@ const filterNames = {
   holo: "홀로 드림",
   pixel: "픽셀 블록",
   summerfilm: "청량 필름",
+  faded: "빛바랜 기억",
+  softglow: "크림 뽀샤시",
+  heartbokeh: "하트 보케",
 };
 
 function formatDateInputValue(date) {
@@ -203,6 +206,9 @@ function presetFilter(name, strength) {
     holo: `brightness(${1 + 0.05 * s}) contrast(${1 + 0.03 * s}) saturate(${1 - 0.06 * s})`,
     pixel: `brightness(${1 + 0.015 * s}) contrast(${1 + 0.08 * s}) saturate(${1 + 0.12 * s})`,
     summerfilm: `brightness(${1 + 0.08 * s}) contrast(${1 + 0.09 * s}) saturate(${1 + 0.34 * s}) hue-rotate(${-3 * s}deg)`,
+    faded: `brightness(${1 - 0.08 * s}) contrast(${1 - 0.24 * s}) saturate(${1 - 0.48 * s}) sepia(${0.08 * s})`,
+    softglow: `brightness(${1 + 0.08 * s}) contrast(${1 - 0.2 * s}) saturate(${1 - 0.05 * s}) sepia(${0.04 * s})`,
+    heartbokeh: `brightness(${1 - 0.03 * s}) contrast(${1 + 0.08 * s}) saturate(${1 + 0.12 * s})`,
   };
   return filters[name] || "none";
 }
@@ -356,13 +362,16 @@ function applyNeonBrush(ctx, width, height, strength, strokes, seed, phaseOffset
       const motionY = point.dy * height;
       const motionLength = Math.hypot(motionX, motionY);
       const hasMotion = motionLength > 0.5;
+      const pointKind = point.kind || (hasMotion ? "drag" : "wave");
       const directionX = hasMotion ? motionX / motionLength : 0;
       const directionY = hasMotion ? motionY / motionLength : 0;
       const normalX = -directionY;
       const normalY = directionX;
       const dragScale = 2.2 + effectStrength * 2.4;
       const phase = basePhase + strokeIndex * 0.83 + pointIndex * 0.27;
-      const channelShift = Math.max(1, Math.round(radius * 0.08 * effectStrength));
+      const channelShift = Math.max(1, Math.round(
+        radius * (pointKind === "twirl" ? 0.035 : 0.07) * effectStrength,
+      ));
 
       for (let y = startY; y <= endY; y += 1) {
         const relativeY = y - centerY;
@@ -374,17 +383,31 @@ function applyNeonBrush(ctx, width, height, strength, strokes, seed, phaseOffset
           const falloff = Math.pow(1 - normalized, 2.15);
           let offsetX;
           let offsetY;
-          if (hasMotion) {
+          if (pointKind === "twirl") {
+            const hold = Math.min(3.2, Math.max(0.28, point.hold || 0.28));
+            const angle = (0.16 + hold * 0.68) * effectStrength * Math.pow(falloff, 0.72);
+            const cosine = Math.cos(angle);
+            const sine = Math.sin(angle);
+            const rotatedX = relativeX * cosine - relativeY * sine;
+            const rotatedY = relativeX * sine + relativeY * cosine;
+            offsetX = rotatedX - relativeX;
+            offsetY = rotatedY - relativeY;
+          } else if (hasMotion) {
             const along = relativeX * directionX + relativeY * directionY;
-            const wave = Math.sin(along / radius * Math.PI * 1.8 + phase)
-              * radius * 0.035 * effectStrength * falloff;
+            const wave = Math.sin(along / radius * Math.PI * 3.8 + phase)
+              * radius * 0.072 * effectStrength * falloff;
             offsetX = -motionX * dragScale * falloff + normalX * wave;
             offsetY = -motionY * dragScale * falloff + normalY * wave;
           } else {
-            const pinch = (0.16 + effectStrength * 0.22) * falloff;
-            const twist = 0.055 * effectStrength * falloff;
-            offsetX = relativeX * pinch - relativeY * twist;
-            offsetY = relativeY * pinch + relativeX * twist;
+            const inverseDistance = distance > 0.5 ? 1 / distance : 0;
+            const radialX = relativeX * inverseDistance;
+            const radialY = relativeY * inverseDistance;
+            const ripple = Math.sin(normalized * Math.PI * 6.5 + phase)
+              * radius * 0.11 * effectStrength * falloff;
+            const sidestep = Math.cos(normalized * Math.PI * 4.5 + phase)
+              * radius * 0.035 * effectStrength * falloff;
+            offsetX = radialX * ripple - radialY * sidestep;
+            offsetY = radialY * ripple + radialX * sidestep;
           }
           const sourceX = Math.round(clamp(
             x + offsetX,
@@ -402,7 +425,7 @@ function applyNeonBrush(ctx, width, height, strength, strokes, seed, phaseOffset
           const centerSource = pixelIndex(sourceX, sourceY, width);
           const redSource = pixelIndex(redX, sourceY, width);
           const blueSource = pixelIndex(blueX, sourceY, width);
-          const mix = falloff * (0.48 + effectStrength * 0.42);
+          const mix = falloff * (pointKind === "twirl" ? 0.78 : 0.48 + effectStrength * 0.42);
           const red = clamp(source[redSource] * 1.18 + source[blueSource + 2] * 0.07);
           const green = clamp(source[centerSource + 1] * 0.72 + Math.min(red, source[blueSource + 2]) * 0.08);
           const blue = clamp(source[blueSource + 2] * 1.24 + source[redSource] * 0.08);
@@ -599,6 +622,146 @@ function applyHoloDream(ctx, width, height, strength) {
   ctx.filter = `blur(${Math.max(1, width * 0.0022 * strength)}px) brightness(1.14)`;
   ctx.drawImage(sourceCanvas, 0, 0, width, height);
   ctx.restore();
+}
+
+function applyFadedMemory(ctx, width, height, strength) {
+  if (strength <= 0.01) return;
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const source = new Uint8ClampedArray(imageData.data);
+  const data = imageData.data;
+  const amount = 0.24 + strength * 0.54;
+
+  for (let index = 0; index < data.length; index += 4) {
+    const light = luminance(source, index);
+    const target = [
+      source[index] * 0.63 + light * 0.08 + 37,
+      source[index + 1] * 0.65 + light * 0.07 + 42,
+      source[index + 2] * 0.69 + light * 0.06 + 49,
+    ];
+    data[index] = mixChannel(source[index], target[0], amount);
+    data[index + 1] = mixChannel(source[index + 1], target[1], amount);
+    data[index + 2] = mixChannel(source[index + 2], target[2], amount);
+  }
+  ctx.putImageData(imageData, 0, 0);
+  addColorWash(ctx, width, height, "#53666a", 0.1 * strength, "multiply");
+  addColorWash(ctx, width, height, "#d8cabd", 0.04 * strength, "screen");
+  addVignette(ctx, width, height, 0.16 * strength);
+}
+
+function applySoftGlow(ctx, width, height, strength) {
+  if (strength <= 0.01) return;
+  const source = snapshotCanvas(ctx.canvas);
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  ctx.globalAlpha = 0.12 + strength * 0.2;
+  ctx.filter = `blur(${Math.max(4, Math.min(width, height) * (0.008 + strength * 0.012))}px) brightness(1.12)`;
+  ctx.drawImage(source, 0, 0, width, height);
+  ctx.filter = "none";
+
+  const glow = ctx.createRadialGradient(
+    width * 0.48,
+    height * 0.42,
+    0,
+    width * 0.48,
+    height * 0.42,
+    Math.max(width, height) * 0.62,
+  );
+  glow.addColorStop(0, `rgba(255,250,239,${0.19 * strength})`);
+  glow.addColorStop(0.48, `rgba(255,217,231,${0.1 * strength})`);
+  glow.addColorStop(1, "rgba(222,205,255,0)");
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, width, height);
+  ctx.restore();
+  addColorWash(ctx, width, height, "#fff1e7", 0.045 * strength, "screen");
+}
+
+function addHeartPath(ctx, x, y, size) {
+  ctx.beginPath();
+  ctx.moveTo(x, y + size * 0.38);
+  ctx.bezierCurveTo(x - size * 0.58, y + size * 0.02, x - size * 0.5, y - size * 0.42, x - size * 0.2, y - size * 0.42);
+  ctx.bezierCurveTo(x, y - size * 0.42, x, y - size * 0.2, x, y - size * 0.12);
+  ctx.bezierCurveTo(x, y - size * 0.2, x, y - size * 0.42, x + size * 0.2, y - size * 0.42);
+  ctx.bezierCurveTo(x + size * 0.5, y - size * 0.42, x + size * 0.58, y + size * 0.02, x, y + size * 0.38);
+  ctx.closePath();
+}
+
+function applyHeartBokeh(ctx, width, height, strength, seed) {
+  if (strength <= 0.01) return;
+  const source = snapshotCanvas(ctx.canvas);
+  const sample = document.createElement("canvas");
+  sample.width = Math.max(30, Math.min(64, Math.round(width / 20)));
+  sample.height = Math.max(24, Math.round(sample.width * height / width));
+  const sampleCtx = sample.getContext("2d", { willReadFrequently: true });
+  sampleCtx.drawImage(source, 0, 0, sample.width, sample.height);
+  const pixels = sampleCtx.getImageData(0, 0, sample.width, sample.height).data;
+  const candidates = [];
+  const threshold = 198 - strength * 14;
+
+  for (let y = 1; y < sample.height * 0.88; y += 1) {
+    for (let x = 1; x < sample.width - 1; x += 1) {
+      const index = pixelIndex(x, y, sample.width);
+      const light = luminance(pixels, index);
+      if (light < threshold) continue;
+      let localPeak = true;
+      for (let offsetY = -1; offsetY <= 1 && localPeak; offsetY += 1) {
+        for (let offsetX = -1; offsetX <= 1; offsetX += 1) {
+          if (offsetX === 0 && offsetY === 0) continue;
+          if (luminance(pixels, pixelIndex(x + offsetX, y + offsetY, sample.width)) > light + 5) {
+            localPeak = false;
+            break;
+          }
+        }
+      }
+      if (localPeak) candidates.push({ x, y, light });
+    }
+  }
+
+  candidates.sort((left, right) => right.light - left.light);
+  const chosen = [];
+  const limit = Math.round(7 + strength * 15);
+  for (const candidate of candidates) {
+    if (chosen.length >= limit) break;
+    if (chosen.some((item) => Math.hypot(item.x - candidate.x, item.y - candidate.y) < 3.2)) continue;
+    chosen.push(candidate);
+  }
+
+  addBloom(ctx, ctx.canvas, width, height, strength * 0.56, "#fff0d2");
+  const random = mulberry32(seed + 887);
+  const minSide = Math.min(width, height);
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  chosen.forEach((point, index) => {
+    const x = (point.x + 0.5) / sample.width * width;
+    const y = (point.y + 0.5) / sample.height * height;
+    const brightness = (point.light - threshold) / Math.max(1, 255 - threshold);
+    const size = minSide * (0.025 + strength * 0.034) * (0.74 + brightness * 0.52 + random() * 0.34);
+    const lineWidth = Math.max(1.5, size * 0.1);
+    const offsets = [
+      { x: -lineWidth * 0.72, color: "rgba(255,36,68,0.78)" },
+      { x: lineWidth * 0.72, color: "rgba(51,245,222,0.72)" },
+      { x: 0, color: "rgba(255,244,176,0.9)" },
+    ];
+    offsets.forEach((edge, edgeIndex) => {
+      ctx.save();
+      ctx.translate(edge.x, edgeIndex === 1 ? lineWidth * 0.18 : 0);
+      ctx.strokeStyle = edge.color;
+      ctx.lineWidth = edgeIndex === 2 ? lineWidth * 0.7 : lineWidth;
+      ctx.shadowColor = edge.color;
+      ctx.shadowBlur = size * (0.22 + strength * 0.22);
+      addHeartPath(ctx, x, y, size);
+      ctx.stroke();
+      ctx.restore();
+    });
+    if (index < 4) {
+      const core = ctx.createRadialGradient(x, y, 0, x, y, size * 0.25);
+      core.addColorStop(0, `rgba(255,255,235,${0.34 + brightness * 0.4})`);
+      core.addColorStop(1, "rgba(255,235,184,0)");
+      ctx.fillStyle = core;
+      ctx.fillRect(x - size * 0.3, y - size * 0.3, size * 0.6, size * 0.6);
+    }
+  });
+  ctx.restore();
+  addVignette(ctx, width, height, 0.12 * strength);
 }
 
 function applyPixelate(ctx, width, height, strength) {
@@ -1479,16 +1642,38 @@ function loadFilmSlotImage(file, index) {
   });
 }
 
-function addLiquifyPoint(stroke, point, deltaX, deltaY) {
+function addLiquifyPoint(stroke, point, deltaX, deltaY, kind = "drag") {
   if (liquifyPointCount() >= 96) return false;
-  stroke.points.push({
+  const brushPoint = {
     x: point.x / elements.canvas.width,
     y: point.y / elements.canvas.height,
     dx: deltaX / elements.canvas.width,
     dy: deltaY / elements.canvas.height,
     radius: state.liquifyBrushSize,
-  });
-  return true;
+    kind,
+    hold: 0,
+  };
+  stroke.points.push(brushPoint);
+  return brushPoint;
+}
+
+function stopLiquifyHold(painting) {
+  if (!painting) return;
+  window.clearTimeout(painting.holdTimeout);
+  window.clearInterval(painting.holdInterval);
+  painting.holdTimeout = null;
+  painting.holdInterval = null;
+}
+
+function cancelActiveLiquifyPaint() {
+  const painting = state.paintingLiquify;
+  if (!painting) return;
+  stopLiquifyHold(painting);
+  if (elements.canvas.hasPointerCapture?.(painting.pointerId)) {
+    elements.canvas.releasePointerCapture(painting.pointerId);
+  }
+  state.paintingLiquify = null;
+  elements.canvas.classList.remove("is-painting-liquify");
 }
 
 function beginLiquifyPaint(event) {
@@ -1507,7 +1692,7 @@ function beginLiquifyPaint(event) {
     return true;
   }
   state.liquifyStrokes.push(stroke);
-  state.paintingLiquify = {
+  const painting = {
     pointerId: event.pointerId,
     stroke,
     lastX: point.x,
@@ -1515,7 +1700,33 @@ function beginLiquifyPaint(event) {
     startX: point.x,
     startY: point.y,
     moved: false,
+    holdPoint: null,
+    holdTimeout: null,
+    holdInterval: null,
   };
+  state.paintingLiquify = painting;
+  painting.holdTimeout = window.setTimeout(() => {
+    if (state.paintingLiquify !== painting || painting.moved) return;
+    const holdPoint = addLiquifyPoint(
+      painting.stroke,
+      { x: painting.startX, y: painting.startY },
+      0,
+      0,
+      "twirl",
+    );
+    if (!holdPoint) return;
+    painting.holdPoint = holdPoint;
+    holdPoint.hold = 0.34;
+    scheduleRender();
+    painting.holdInterval = window.setInterval(() => {
+      if (state.paintingLiquify !== painting || painting.moved) {
+        stopLiquifyHold(painting);
+        return;
+      }
+      holdPoint.hold = Math.min(3.2, holdPoint.hold + 0.16);
+      scheduleRender();
+    }, 90);
+  }, 220);
   elements.canvas.setPointerCapture(event.pointerId);
   elements.canvas.classList.add("is-painting-liquify");
   event.preventDefault();
@@ -1534,6 +1745,7 @@ function moveLiquifyPaint(event) {
   const spacing = Math.min(elements.canvas.width, elements.canvas.height)
     * Math.max(0.005, state.liquifyBrushSize * 0.08);
   if (distance < spacing) return true;
+  stopLiquifyHold(painting);
   const steps = Math.min(10, Math.max(1, Math.ceil(distance / spacing)));
   let added = false;
   let previousX = painting.lastX;
@@ -1543,7 +1755,7 @@ function moveLiquifyPaint(event) {
       x: painting.lastX + deltaX * step / steps,
       y: painting.lastY + deltaY * step / steps,
     };
-    if (!addLiquifyPoint(painting.stroke, nextPoint, nextPoint.x - previousX, nextPoint.y - previousY)) break;
+    if (!addLiquifyPoint(painting.stroke, nextPoint, nextPoint.x - previousX, nextPoint.y - previousY, "drag")) break;
     previousX = nextPoint.x;
     previousY = nextPoint.y;
     added = true;
@@ -1560,12 +1772,15 @@ function moveLiquifyPaint(event) {
 
 function endLiquifyPaint(event) {
   if (!state.paintingLiquify || state.paintingLiquify.pointerId !== event.pointerId) return false;
-  if (!state.paintingLiquify.moved) {
+  const painting = state.paintingLiquify;
+  stopLiquifyHold(painting);
+  if (!painting.moved && !painting.holdPoint) {
     addLiquifyPoint(
-      state.paintingLiquify.stroke,
-      { x: state.paintingLiquify.startX, y: state.paintingLiquify.startY },
+      painting.stroke,
+      { x: painting.startX, y: painting.startY },
       0,
       0,
+      "wave",
     );
   }
   if (elements.canvas.hasPointerCapture(event.pointerId)) elements.canvas.releasePointerCapture(event.pointerId);
@@ -1654,6 +1869,9 @@ function applySelectedFilter(ctx, canvas, width, height, seed = state.seed) {
   if (state.filter === "holo") applyHoloDream(ctx, width, height, state.strength);
   if (state.filter === "pixel") applyPixelate(ctx, width, height, state.strength);
   if (state.filter === "summerfilm") applySummerFilm(ctx, width, height, state.strength);
+  if (state.filter === "faded") applyFadedMemory(ctx, width, height, state.strength);
+  if (state.filter === "softglow") applySoftGlow(ctx, width, height, state.strength);
+  if (state.filter === "heartbokeh") applyHeartBokeh(ctx, width, height, state.strength, seed);
 
   if (state.filter !== "comic") {
     addPixelEffects(ctx, width, height, state.filter, state.strength, state.grain, seed);
@@ -1950,7 +2168,7 @@ async function loadFile(file) {
     state.selectedStickerId = null;
     state.draggingSticker = null;
     state.liquifyStrokes = [];
-    state.paintingLiquify = null;
+    cancelActiveLiquifyPaint();
     clearFilmFrameImages();
     updateLoadedUI(file);
     updateLiquifyUI();
@@ -1972,7 +2190,7 @@ function resetEditor() {
   state.selectedStickerId = null;
   state.draggingSticker = null;
   state.liquifyStrokes = [];
-  state.paintingLiquify = null;
+  cancelActiveLiquifyPaint();
   clearFilmFrameImages();
   elements.canvas.classList.remove("is-dragging-sticker", "is-resizing-sticker", "is-painting-liquify");
   elements.canvas.width = 0;
@@ -2093,6 +2311,7 @@ window.addEventListener("paste", (event) => {
 
 elements.filterCards.forEach((card) => {
   card.addEventListener("click", () => {
+    cancelActiveLiquifyPaint();
     state.filter = card.dataset.filter;
     elements.filterCards.forEach((item) => {
       const selected = item === card;
@@ -2122,8 +2341,7 @@ elements.grainRange.addEventListener("input", () => {
 elements.liquifyModeButtons.forEach((button) => {
   button.addEventListener("click", () => {
     state.liquifyMode = button.dataset.liquifyMode;
-    state.paintingLiquify = null;
-    elements.canvas.classList.remove("is-painting-liquify");
+    cancelActiveLiquifyPaint();
     elements.liquifyModeButtons.forEach((item) => {
       const selected = item === button;
       item.classList.toggle("is-selected", selected);

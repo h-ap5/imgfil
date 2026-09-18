@@ -43,7 +43,8 @@
         </div>
 
         <div class="workspace">
-          <section class="preview-panel" aria-labelledby="preview-heading">
+          <div class="preview-column">
+            <section class="preview-panel" aria-labelledby="preview-heading">
             <div class="panel-heading">
               <h1 id="preview-heading">PREVIEW</h1>
               <button id="reset-button" class="icon-button" type="button" disabled aria-label="처음부터 다시 하기">
@@ -88,9 +89,8 @@
                 누르고 원본 보기
               </button>
             </div>
-          </section>
+            </section>
 
-          <aside class="control-panel" aria-label="필터 설정">
             <section class="control-section" aria-labelledby="filter-title">
               <div class="section-title-row">
                 <h2 id="filter-title">필터</h2>
@@ -177,8 +177,26 @@
                   <span class="filter-copy"><strong>청량 필름</strong><small>clear / print / date</small></span>
                   <span class="filter-index">16</span>
                 </button>
+                <button class="filter-card" type="button" role="radio" aria-checked="false" data-filter="faded">
+                  <span class="filter-swatch swatch-faded" aria-hidden="true"></span>
+                  <span class="filter-copy"><strong>빛바랜 기억</strong><small>faded / muted / memory</small></span>
+                  <span class="filter-index">17</span>
+                </button>
+                <button class="filter-card" type="button" role="radio" aria-checked="false" data-filter="softglow">
+                  <span class="filter-swatch swatch-softglow" aria-hidden="true"></span>
+                  <span class="filter-copy"><strong>크림 뽀샤시</strong><small>soft / creamy / bloom</small></span>
+                  <span class="filter-index">18</span>
+                </button>
+                <button class="filter-card" type="button" role="radio" aria-checked="false" data-filter="heartbokeh">
+                  <span class="filter-swatch swatch-heartbokeh" aria-hidden="true"></span>
+                  <span class="filter-copy"><strong>하트 보케</strong><small>heart / light / bokeh</small></span>
+                  <span class="filter-index">19</span>
+                </button>
               </div>
             </section>
+          </div>
+
+          <aside class="control-panel" aria-label="편집 도구">
 
             <section class="control-section sticker-section" aria-labelledby="sticker-title">
               <div class="section-title-row sticker-title-row">
@@ -239,7 +257,7 @@
                     <input id="liquify-brush-size" type="range" min="6" max="34" value="18" />
                   </label>
                   <div class="brush-actions">
-                    <span>사진을 누르거나 문지르기</span>
+                    <span>짧게·드래그: 파동 / 길게: 꼬임</span>
                     <button id="undo-liquify" type="button" disabled>한 획 취소</button>
                     <button id="clear-liquify" type="button" disabled>전부 지우기</button>
                   </div>
