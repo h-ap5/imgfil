@@ -1082,7 +1082,7 @@ h2 {
 }
 
 .export-format-control .segmented-control {
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
 }
 
 .liquify-brush-tools > .range-control {
@@ -1320,13 +1320,6 @@ input[type="range"]::-moz-range-thumb {
   padding: 0 4px;
   font-size: 0.875rem;
   font-weight: 900;
-}
-
-.gif-export-note {
-  margin: 8px 0 0;
-  color: var(--cyan);
-  font-size: 0.75rem;
-  font-weight: 700;
 }
 
 .local-note {

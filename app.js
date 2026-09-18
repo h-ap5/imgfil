@@ -30,7 +30,6 @@ const elements = {
   randomizePattern: $("#randomize-pattern"),
   ratioButtons: $$("[data-ratio]"),
   formatButtons: $$('[data-format]'),
-  gifExportNote: $("#gif-export-note"),
   dateToggle: $("#date-toggle"),
   dateInput: $("#date-input"),
   fileMeta: $("#file-meta"),
@@ -355,9 +354,11 @@ function applyNeonBrush(ctx, width, height, strength, strokes, seed, phaseOffset
   const influenceField = new Float32Array(pixelCount);
   const chromaField = new Float32Array(pixelCount);
   const radiusField = new Float32Array(pixelCount);
+  const accumulatedField = new Float32Array(pixelCount);
 
   strokes.forEach((stroke, strokeIndex) => {
     stroke.points.forEach((point, pointIndex) => {
+      const pointWeight = Math.max(1, point.weight || 1);
       const centerX = point.x * width;
       const centerY = point.y * height;
       const radius = Math.max(8, point.radius * minSide);
@@ -416,11 +417,16 @@ function applyNeonBrush(ctx, width, height, strength, strokes, seed, phaseOffset
             offsetY = radialY * ripple + radialX * sidestep;
           }
           const fieldIndex = y * width + x;
-          offsetFieldX[fieldIndex] += offsetX;
-          offsetFieldY[fieldIndex] += offsetY;
-          influenceField[fieldIndex] = Math.max(influenceField[fieldIndex], falloff);
-          chromaField[fieldIndex] = Math.max(chromaField[fieldIndex], channelShift * falloff);
+          offsetFieldX[fieldIndex] += offsetX * pointWeight;
+          offsetFieldY[fieldIndex] += offsetY * pointWeight;
+          const weightedFalloff = 1 - Math.pow(1 - falloff, Math.min(8, pointWeight));
+          influenceField[fieldIndex] = Math.max(influenceField[fieldIndex], weightedFalloff);
+          chromaField[fieldIndex] = Math.max(
+            chromaField[fieldIndex],
+            channelShift * falloff * Math.min(2, Math.sqrt(pointWeight)),
+          );
           radiusField[fieldIndex] = Math.max(radiusField[fieldIndex], radius);
+          accumulatedField[fieldIndex] += falloff * pointWeight;
         }
       }
     });
@@ -434,7 +440,9 @@ function applyNeonBrush(ctx, width, height, strength, strokes, seed, phaseOffset
       let offsetX = offsetFieldX[fieldIndex];
       let offsetY = offsetFieldY[fieldIndex];
       const offsetLength = Math.hypot(offsetX, offsetY);
-      const maxOffset = radiusField[fieldIndex] * 0.82;
+      const maxOffset = radiusField[fieldIndex] * (
+        0.72 + Math.min(0.55, Math.log2(1 + accumulatedField[fieldIndex]) * 0.12)
+      );
       if (offsetLength > maxOffset && maxOffset > 0) {
         const scale = maxOffset / offsetLength;
         offsetX *= scale;
@@ -1717,8 +1725,83 @@ function loadFilmSlotImage(file, index) {
   });
 }
 
+function liquifyPointWeight(point) {
+  return Math.max(1, point.weight || 1);
+}
+
+function mergeLiquifyPoints(first, second) {
+  const firstWeight = liquifyPointWeight(first);
+  const secondWeight = liquifyPointWeight(second);
+  const weight = firstWeight + secondWeight;
+  return {
+    x: (first.x * firstWeight + second.x * secondWeight) / weight,
+    y: (first.y * firstWeight + second.y * secondWeight) / weight,
+    dx: (first.dx * firstWeight + second.dx * secondWeight) / weight,
+    dy: (first.dy * firstWeight + second.dy * secondWeight) / weight,
+    radius: (first.radius * firstWeight + second.radius * secondWeight) / weight,
+    kind: first.kind,
+    hold: Math.max(first.hold || 0, second.hold || 0),
+    weight,
+  };
+}
+
+function compactLiquifyStroke(stroke) {
+  if (stroke.points.length <= 96) return;
+  const compacted = [];
+  for (let index = 0; index < stroke.points.length; index += 1) {
+    const first = stroke.points[index];
+    const second = stroke.points[index + 1];
+    if (second && first.kind === second.kind && first.kind === "drag") {
+      compacted.push(mergeLiquifyPoints(first, second));
+      index += 1;
+    } else {
+      compacted.push(first);
+    }
+  }
+  stroke.points = compacted;
+}
+
+function bucketLiquifyHistory(strokes, cellSize) {
+  const buckets = new Map();
+  strokes.forEach((stroke) => {
+    stroke.points.forEach((point) => {
+      const direction = point.kind === "drag"
+        ? Math.round((Math.atan2(point.dy, point.dx) + Math.PI) / (Math.PI / 4)) % 8
+        : 0;
+      const key = [
+        point.kind,
+        Math.floor(point.x / cellSize),
+        Math.floor(point.y / cellSize),
+        direction,
+      ].join(":");
+      const existing = buckets.get(key);
+      buckets.set(key, existing ? mergeLiquifyPoints(existing, point) : { ...point });
+    });
+  });
+  return [...buckets.values()];
+}
+
+function compactLiquifyHistory(activeStroke = null) {
+  state.liquifyStrokes.forEach(compactLiquifyStroke);
+  if (liquifyPointCount() <= 240 || state.liquifyStrokes.length <= 24) return;
+
+  const keepCount = 24;
+  const splitAt = Math.max(1, state.liquifyStrokes.length - keepCount);
+  const older = state.liquifyStrokes.slice(0, splitAt).filter((stroke) => stroke !== activeStroke);
+  const recent = state.liquifyStrokes.slice(splitAt);
+  if (older.length === 0) return;
+
+  let cellSize = 0.026;
+  let compactedPoints = bucketLiquifyHistory(older, cellSize);
+  while (compactedPoints.length + recent.reduce((sum, stroke) => sum + stroke.points.length, 0) > 190
+    && cellSize < 0.09) {
+    cellSize += 0.014;
+    compactedPoints = bucketLiquifyHistory(older, cellSize);
+  }
+  state.liquifyStrokes = [{ points: compactedPoints, compacted: true }, ...recent];
+}
+
 function addLiquifyPoint(stroke, point, deltaX, deltaY, kind = "drag") {
-  if (liquifyPointCount() >= 180) return false;
   const brushPoint = {
     x: point.x / elements.canvas.width,
     y: point.y / elements.canvas.height,
@@ -1727,8 +1810,11 @@ function addLiquifyPoint(stroke, point, deltaX, deltaY, kind = "drag") {
     radius: state.liquifyBrushSize,
     kind,
     hold: 0,
+    weight: 1,
   };
   stroke.points.push(brushPoint);
+  compactLiquifyStroke(stroke);
+  compactLiquifyHistory(stroke);
   return brushPoint;
 }
 
@@ -1762,10 +1848,6 @@ function beginLiquifyPaint(event) {
   const point = canvasPointFromEvent(event);
   if (!point) return true;
   const stroke = { points: [] };
-  if (liquifyPointCount() >= 180) {
-    event.preventDefault();
-    return true;
-  }
   state.liquifyStrokes.push(stroke);
   const anchorPoint = addLiquifyPoint(stroke, point, 0, 0, "wave");
   if (!anchorPoint) {
@@ -2321,145 +2403,6 @@ function setComparing(active) {
   scheduleRender();
 }
 
-const GIF_EXPORT = {
-  maxSide: 720,
-  durationMs: 2400,
-  fps: 10,
-  frameCount: 24,
-  delayCentiseconds: 10,
-};
-
-function gifAscii(value) {
-  return Uint8Array.from([...value].map((character) => character.charCodeAt(0)));
-}
-
-function gifUint16(value) {
-  return Uint8Array.of(value & 0xff, value >> 8 & 0xff);
-}
-
-function createRgb332Palette() {
-  const palette = new Uint8Array(256 * 3);
-  for (let index = 0; index < 256; index += 1) {
-    palette[index * 3] = Math.round(((index >> 5) & 7) * 255 / 7);
-    palette[index * 3 + 1] = Math.round(((index >> 2) & 7) * 255 / 7);
-    palette[index * 3 + 2] = Math.round((index & 3) * 255 / 3);
-  }
-  return palette;
-}
-
-function quantizeRgb332(imageData, width, height) {
-  const pixels = imageData.data;
-  const indices = new Uint8Array(width * height);
-  const bayer = [
-    0, 8, 2, 10,
-    12, 4, 14, 6,
-    3, 11, 1, 9,
-    15, 7, 13, 5,
-  ];
-  for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
-      const pixel = y * width + x;
-      const source = pixel * 4;
-      const dither = (bayer[(y & 3) * 4 + (x & 3)] - 7.5) * 1.35;
-      const red = Math.round(clamp(pixels[source] + dither) * 7 / 255);
-      const green = Math.round(clamp(pixels[source + 1] + dither) * 7 / 255);
-      const blue = Math.round(clamp(pixels[source + 2] + dither * 1.25) * 3 / 255);
-      indices[pixel] = red << 5 | green << 2 | blue;
-    }
-  }
-  return indices;
-}
-
-function encodeGifLzw(indices) {
-  const clearCode = 256;
-  const endCode = 257;
-  const bytes = [];
-  let dictionary = new Map();
-  let nextCode = 258;
-  let codeSize = 9;
-  let bitBuffer = 0;
-  let bitCount = 0;
-
-  const writeCode = (code) => {
-    bitBuffer |= code << bitCount;
-    bitCount += codeSize;
-    while (bitCount >= 8) {
-      bytes.push(bitBuffer & 0xff);
-      bitBuffer >>>= 8;
-      bitCount -= 8;
-    }
-  };
-
-  writeCode(clearCode);
-  let prefix = indices[0];
-  for (let index = 1; index < indices.length; index += 1) {
-    const suffix = indices[index];
-    const key = prefix * 256 + suffix;
-    const match = dictionary.get(key);
-    if (match !== undefined) {
-      prefix = match;
-      continue;
-    }
-
-    writeCode(prefix);
-    if (nextCode < 4096) {
-      dictionary.set(key, nextCode);
-      nextCode += 1;
-      if (nextCode === 1 << codeSize && codeSize < 12) codeSize += 1;
-    } else {
-      writeCode(clearCode);
-      dictionary = new Map();
-      nextCode = 258;
-      codeSize = 9;
-    }
-    prefix = suffix;
-  }
-  writeCode(prefix);
-  writeCode(endCode);
-  if (bitCount > 0) bytes.push(bitBuffer & 0xff);
-  return Uint8Array.from(bytes);
-}
-
-function splitGifSubBlocks(bytes) {
-  const blocks = [];
-  for (let offset = 0; offset < bytes.length; offset += 255) {
-    const length = Math.min(255, bytes.length - offset);
-    blocks.push(Uint8Array.of(length), bytes.slice(offset, offset + length));
-  }
-  blocks.push(Uint8Array.of(0));
-  return blocks;
-}
-
-function beginGif(width, height) {
-  return [
-    gifAscii("GIF89a"),
-    gifUint16(width),
-    gifUint16(height),
-    Uint8Array.of(0xf7, 0, 0),
-    createRgb332Palette(),
-    Uint8Array.of(0x21, 0xff, 0x0b),
-    gifAscii("NETSCAPE2.0"),
-    Uint8Array.of(0x03, 0x01, 0x00, 0x00, 0x00),
-  ];
-}
-
-function appendGifFrame(chunks, imageData, width, height, delayCentiseconds) {
-  const compressed = encodeGifLzw(quantizeRgb332(imageData, width, height));
-  chunks.push(
-    Uint8Array.of(
-      0x21, 0xf9, 0x04, 0x04,
-      delayCentiseconds & 0xff,
-      delayCentiseconds >> 8 & 0xff,
-      0x00, 0x00,
-      0x2c, 0x00, 0x00, 0x00, 0x00,
-    ),
-    gifUint16(width),
-    gifUint16(height),
-    Uint8Array.of(0x00, 0x08),
-    ...splitGifSubBlocks(compressed),
-  );
-}
-
 function safeDownloadBase() {
   return state.fileName.replace(/\.[^/.]+$/, "").replace(/[^a-zA-Z0-9가-힣_-]+/g, "-") || "memory";
 }
@@ -2472,77 +2415,17 @@ function triggerBlobDownload(blob, extension) {
   window.setTimeout(() => URL.revokeObjectURL(link.href), 1000);
 }
 
-function validateImageBlob(blob) {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(blob);
-    const image = new Image();
-    image.onload = () => {
-      URL.revokeObjectURL(url);
-      resolve();
-    };
-    image.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error("생성된 이미지 파일을 다시 읽지 못했습니다."));
-    };
-    image.src = url;
-  });
-}
-
-function nextPaint() {
-  return new Promise((resolve) => requestAnimationFrame(() => window.setTimeout(resolve, 0)));
-}
-
-function updateDownloadButtonLabel(rendering = false, progress = "") {
+function updateDownloadButtonLabel(rendering = false) {
   if (rendering) {
-    elements.downloadButton.textContent = progress ? `GIF 렌더링 ${progress}` : "렌더링 중...";
+    elements.downloadButton.textContent = "렌더링 중...";
     return;
   }
   const label = state.exportFormat.toUpperCase();
   elements.downloadButton.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0 5-5m-5 5-5-5M5 19h14" /></svg>${label}로 저장하기`;
 }
 
-async function downloadAnimatedGif() {
-  elements.downloadButton.disabled = true;
-  const frameCanvas = document.createElement("canvas");
-  let chunks = null;
-  try {
-    for (let index = 0; index < GIF_EXPORT.frameCount; index += 1) {
-      updateDownloadButtonLabel(true, `${index + 1}/${GIF_EXPORT.frameCount}`);
-      await nextPaint();
-      const phase = index / GIF_EXPORT.frameCount * Math.PI * 2;
-      const animateNoise = ["analog", "signal", "xerox"].includes(state.filter);
-      const renderSeed = animateNoise ? state.seed + index * 977 : state.seed;
-      const output = drawProcessed(frameCanvas, GIF_EXPORT.maxSide, false, phase, renderSeed);
-      if (!chunks) chunks = beginGif(output.width, output.height);
-      const frameContext = frameCanvas.getContext("2d", { willReadFrequently: true });
-      appendGifFrame(
-        chunks,
-        frameContext.getImageData(0, 0, output.width, output.height),
-        output.width,
-        output.height,
-        GIF_EXPORT.delayCentiseconds,
-      );
-    }
-    chunks.push(Uint8Array.of(0x3b));
-    const blob = new Blob(chunks, { type: "image/gif" });
-    await validateImageBlob(blob);
-    triggerBlobDownload(blob, "gif");
-    showToast(`${filterNames[state.filter]} · ${GIF_EXPORT.durationMs / 1000}초 GIF로 저장했어요.`);
-  } catch (error) {
-    console.error(error);
-    showToast("GIF 저장에 실패했어요. 더 작은 사진으로 다시 시도해 주세요.");
-  } finally {
-    elements.downloadButton.disabled = false;
-    updateDownloadButtonLabel();
-  }
-}
-
 function downloadImage() {
   if (!state.image) return;
-  if (state.exportFormat === "gif") {
-    void downloadAnimatedGif();
-    return;
-  }
   elements.downloadButton.disabled = true;
   updateDownloadButtonLabel(true);
   requestAnimationFrame(() => {
@@ -2705,7 +2588,6 @@ elements.formatButtons.forEach((button) => {
       item.classList.toggle("is-selected", selected);
       item.setAttribute("aria-pressed", String(selected));
     });
-    elements.gifExportNote.hidden = state.exportFormat !== "gif";
     updateDownloadButtonLabel();
   });
 });
