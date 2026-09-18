@@ -71,7 +71,9 @@ body {
 }
 
 button,
-input {
+input,
+textarea,
+select {
   font: inherit;
 }
 
@@ -86,6 +88,8 @@ button,
 
 button:focus-visible,
 input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
 [role="button"]:focus-visible,
 a:focus-visible {
   outline: 3px solid var(--cyan);
@@ -725,17 +729,13 @@ h2 {
 
 .swatch-hearttunnel {
   background-color: #efa6c5;
-  background-image: radial-gradient(circle at 50% 44%, #fff 0 10%, #dc7fac 11% 22%, #fff 23% 35%, #e7a0c0 36% 52%, #fff 53% 66%, #df8eb4 67%);
+  background-image: url("assets/heart-tunnel.png");
+  background-position: center;
+  background-size: cover;
 }
 
 .swatch-hearttunnel::after {
-  content: "♡";
-  display: grid;
-  place-items: center;
-  color: #fff;
-  font-size: 2rem;
-  font-weight: 700;
-  text-shadow: 0 0 7px rgba(255,255,255,.9);
+  background: rgba(255,255,255,.08);
 }
 
 .sticker-section {
@@ -773,7 +773,7 @@ h2 {
 
 .sticker-tabs {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 2px;
   padding: 2px;
   border-top: 2px solid var(--border-light);
@@ -896,6 +896,91 @@ h2 {
   color: var(--red);
 }
 
+.vn-section {
+  overflow: hidden;
+}
+
+.vn-panel {
+  padding: 0 16px 16px;
+}
+
+.segmented-control.three-segment-control {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.vn-tools {
+  display: grid;
+  gap: 16px;
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 2px solid var(--border-light);
+}
+
+.text-control {
+  display: grid;
+  gap: 8px;
+  color: var(--text);
+  font-size: 0.875rem;
+  font-weight: 900;
+}
+
+.text-control input,
+.text-control textarea {
+  width: 100%;
+  border: 2px solid var(--border-light);
+  border-radius: 0;
+  color: var(--text);
+  background: var(--ink-soft);
+  outline: none;
+  transition: border-color var(--duration), background-color var(--duration);
+}
+
+.text-control input {
+  min-height: 40px;
+  padding: 8px 12px;
+}
+
+.text-control textarea {
+  min-height: 88px;
+  padding: 8px 12px;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.text-control input:hover,
+.text-control textarea:hover,
+.text-control input:focus,
+.text-control textarea:focus {
+  border-color: var(--cyan);
+  background: var(--ink-raised);
+}
+
+.vn-scene-tools {
+  display: grid;
+  gap: 16px;
+  padding-top: 24px;
+  border-top: 2px solid var(--border-light);
+}
+
+.vn-upload-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.vn-upload-grid .compact-action,
+.vn-clear-assets {
+  width: 100%;
+}
+
+.vn-asset-status {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
 .filter-copy {
   display: flex;
   min-width: 0;
@@ -986,11 +1071,11 @@ h2 {
   border-top: 2px solid var(--border-light);
 }
 
-.overlay-language-control {
+.segmented-control.overlay-language-control {
   grid-template-columns: repeat(4, 1fr);
 }
 
-.two-segment-control {
+.segmented-control.two-segment-control {
   grid-template-columns: repeat(2, 1fr);
 }
 

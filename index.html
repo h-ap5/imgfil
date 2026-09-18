@@ -237,6 +237,7 @@
 
               <div class="sticker-tabs" role="tablist" aria-label="스티커 팩">
                 <button class="is-selected" type="button" role="tab" aria-selected="true" data-sticker-group="holo">홀로</button>
+                <button type="button" role="tab" aria-selected="false" data-sticker-group="y2k">Y2K</button>
                 <button type="button" role="tab" aria-selected="false" data-sticker-group="pixel">픽셀</button>
                 <button type="button" role="tab" aria-selected="false" data-sticker-group="custom">내꺼</button>
               </div>
@@ -252,6 +253,73 @@
                   <input id="sticker-rotation" type="range" min="-180" max="180" value="0" />
                 </label>
                 <button id="delete-sticker" class="sticker-delete" type="button">선택 삭제</button>
+              </div>
+            </section>
+
+            <section class="control-section vn-section" aria-labelledby="vn-title">
+              <div class="section-title-row">
+                <h2 id="vn-title">미연시</h2>
+              </div>
+
+              <div class="vn-panel">
+                <fieldset class="ratio-control vn-mode-control">
+                  <legend>구성</legend>
+                  <div class="segmented-control three-segment-control">
+                    <button class="is-selected" type="button" data-vn-mode="off" aria-pressed="true">끔</button>
+                    <button type="button" data-vn-mode="dialogue" aria-pressed="false">대화창</button>
+                    <button type="button" data-vn-mode="scene" aria-pressed="false">장면 합성</button>
+                  </div>
+                </fieldset>
+
+                <div id="vn-tools" class="vn-tools" hidden>
+                  <label class="text-control" for="vn-name">
+                    <span>이름</span>
+                    <input id="vn-name" type="text" maxlength="24" value="이름" />
+                  </label>
+                  <label class="text-control" for="vn-dialogue">
+                    <span>대사</span>
+                    <textarea id="vn-dialogue" rows="3" maxlength="220">대사를 입력하세요.</textarea>
+                  </label>
+
+                  <fieldset class="ratio-control vn-style-control">
+                    <legend>대화창 디자인</legend>
+                    <div class="segmented-control three-segment-control">
+                      <button class="is-selected" type="button" data-vn-style="classic" aria-pressed="true">클래식</button>
+                      <button type="button" data-vn-style="pink" aria-pressed="false">핑크</button>
+                      <button type="button" data-vn-style="cyber" aria-pressed="false">사이버</button>
+                    </div>
+                  </fieldset>
+
+                  <fieldset class="ratio-control vn-font-control">
+                    <legend>대사 글꼴</legend>
+                    <div class="segmented-control two-segment-control">
+                      <button class="is-selected" type="button" data-vn-font="pixel" aria-pressed="true">Mona12</button>
+                      <button type="button" data-vn-font="serif" aria-pressed="false">명조</button>
+                    </div>
+                  </fieldset>
+
+                  <div id="vn-scene-tools" class="vn-scene-tools" hidden>
+                    <input id="vn-background-input" type="file" accept="image/jpeg,image/png,image/webp" hidden />
+                    <input id="vn-character-input" type="file" accept="image/png,image/webp" hidden />
+                    <div class="vn-upload-grid">
+                      <button id="upload-vn-background" class="compact-action" type="button" disabled>배경 이미지</button>
+                      <button id="upload-vn-character" class="compact-action" type="button" disabled>누끼 캐릭터</button>
+                    </div>
+                    <div class="vn-asset-status">
+                      <span id="vn-background-status">기본 사진을 배경으로 사용</span>
+                      <span id="vn-character-status">캐릭터 없음</span>
+                    </div>
+                    <label class="range-control" for="vn-character-size">
+                      <span><strong>캐릭터 크기</strong><output id="vn-character-size-value">78%</output></span>
+                      <input id="vn-character-size" type="range" min="35" max="125" value="78" />
+                    </label>
+                    <label class="range-control" for="vn-character-x">
+                      <span><strong>캐릭터 위치</strong><output id="vn-character-x-value">68%</output></span>
+                      <input id="vn-character-x" type="range" min="10" max="90" value="68" />
+                    </label>
+                    <button id="clear-vn-assets" class="compact-action vn-clear-assets" type="button" disabled>장면 이미지 비우기</button>
+                  </div>
+                </div>
               </div>
             </section>
 
@@ -331,6 +399,14 @@
                   <button id="rotate-camera-left" class="compact-action" type="button" disabled>↶ 90°</button>
                   <output id="camera-rotation-value">0°</output>
                   <button id="rotate-camera-right" class="compact-action" type="button" disabled>90° ↷</button>
+                </div>
+              </fieldset>
+
+              <fieldset class="ratio-control overlay-control">
+                <legend>디카 프레임</legend>
+                <div class="segmented-control two-segment-control">
+                  <button class="is-selected" type="button" data-digicam-frame="off" aria-pressed="true">끔</button>
+                  <button type="button" data-digicam-frame="on" aria-pressed="false">켬</button>
                 </div>
               </fieldset>
 

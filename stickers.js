@@ -32,6 +32,17 @@
   const holo = (body) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">${holoDefs}${body}</svg>`;
   const pixel = (body) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" shape-rendering="crispEdges">
     <rect width="100" height="100" fill="none"/>${body}</svg>`;
+  const y2k = (body) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+    <defs>
+      <filter id="y-shadow" x="-30%" y="-30%" width="170%" height="170%">
+        <feDropShadow dx="3" dy="4" stdDeviation="1.5" flood-color="#17204f" flood-opacity=".42"/>
+      </filter>
+      <linearGradient id="y-chrome" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#fff"/><stop offset=".28" stop-color="#9eeeff"/>
+        <stop offset=".5" stop-color="#fff"/><stop offset=".72" stop-color="#9b80d2"/>
+        <stop offset="1" stop-color="#e7fbff"/>
+      </linearGradient>
+    </defs>${body}</svg>`;
 
   window.STICKER_CATALOG = [
     {
@@ -93,6 +104,54 @@
       label: "체리",
       group: "holo",
       svg: holo(`<path d="M47 54c0-26 8-34 25-37M54 53c3-21-3-31-19-38M58 20c9 0 16 3 20 10-10 2-18-1-20-10Z" fill="none" stroke="#789c78" stroke-width="5" stroke-linecap="round"/><circle cx="37" cy="66" r="18" fill="url(#jelly)" stroke="#fff" stroke-width="4"/><circle cx="66" cy="68" r="18" fill="url(#pearl)" stroke="#fff" stroke-width="4"/><circle cx="31" cy="59" r="5" fill="#fff" opacity=".7"/><circle cx="60" cy="61" r="5" fill="#fff" opacity=".7"/>`),
+    },
+    {
+      id: "y2k-love-bubble",
+      label: "LOVE 말풍선",
+      group: "y2k",
+      svg: y2k(`<path d="M10 20h80v53H58L45 88l1-15H10Z" fill="#fff8f2" stroke="#151626" stroke-width="4" filter="url(#y-shadow)"/><path d="M18 28h64v36H18Z" fill="#f6b4d4" stroke="#151626" stroke-width="2"/><text x="50" y="53" text-anchor="middle" font-family="monospace" font-size="20" font-weight="900" fill="#161727">LOVE!</text><path d="m76 13 3 7 8 3-8 3-3 8-3-8-8-3 8-3Z" fill="#7af0e9" stroke="#151626" stroke-width="2"/>`),
+    },
+    {
+      id: "y2k-checker-flower",
+      label: "체커 꽃",
+      group: "y2k",
+      svg: y2k(`<g filter="url(#y-shadow)" stroke="#151626" stroke-width="3"><circle cx="50" cy="18" r="17" fill="#fff"/><circle cx="78" cy="38" r="17" fill="#151626"/><circle cx="68" cy="71" r="17" fill="#fff"/><circle cx="32" cy="71" r="17" fill="#151626"/><circle cx="22" cy="38" r="17" fill="#fff"/><circle cx="50" cy="48" r="20" fill="#ff77bd"/></g><path d="M42 43h8v8h-8zm8 8h8v8h-8zm0-16h8v8h-8zm-8 24h8v8h-8Z" fill="#fff"/>`),
+    },
+    {
+      id: "y2k-heart-mail",
+      label: "하트 메일",
+      group: "y2k",
+      svg: y2k(`<g filter="url(#y-shadow)"><path d="M8 25h84v56H8Z" fill="#fdfbf4" stroke="#151626" stroke-width="4"/><path d="m10 28 40 31 40-31M10 78l29-29m51 29L61 49" fill="none" stroke="#151626" stroke-width="4"/><path d="M50 64C39 56 28 48 28 37c0-8 6-13 13-13 5 0 8 3 10 7 3-4 6-7 11-7 7 0 13 5 13 13 0 11-13 20-25 27Z" fill="#ff76bc" stroke="#fff" stroke-width="3"/></g>`),
+    },
+    {
+      id: "y2k-mini-camera",
+      label: "미니 디카",
+      group: "y2k",
+      svg: y2k(`<g filter="url(#y-shadow)"><path d="M12 28h76v53H12Z" fill="url(#y-chrome)" stroke="#151626" stroke-width="4"/><path d="M23 20h24l6 10H18Z" fill="#f179bd" stroke="#151626" stroke-width="3"/><circle cx="55" cy="54" r="21" fill="#171827" stroke="#fff" stroke-width="4"/><circle cx="55" cy="54" r="13" fill="#78e5ef" stroke="#6c66a4" stroke-width="4"/><circle cx="51" cy="49" r="5" fill="#fff" opacity=".82"/><path d="M19 37h15v10H19Z" fill="#fff" stroke="#151626" stroke-width="2"/><circle cx="79" cy="37" r="4" fill="#ffed68"/></g>`),
+    },
+    {
+      id: "y2k-drip-star",
+      label: "녹는 별",
+      group: "y2k",
+      svg: y2k(`<path d="m50 8 12 27 29 3-22 19 7 29-17-11-4 18-7-22-17 15 7-29-22-19 29-3Z" fill="#151626" stroke="#fff" stroke-width="5" filter="url(#y-shadow)"/><path d="m50 22 7 18 20 2-15 12 5 19-17-10-16 10 5-19-15-12 20-2Z" fill="#76eee7"/><circle cx="45" cy="46" r="3" fill="#151626"/><circle cx="58" cy="46" r="3" fill="#151626"/><path d="M44 55c5 5 10 5 15 0" fill="none" stroke="#151626" stroke-width="3" stroke-linecap="round"/>`),
+    },
+    {
+      id: "y2k-orbit",
+      label: "체커 행성",
+      group: "y2k",
+      svg: y2k(`<circle cx="50" cy="49" r="26" fill="#ff8bc7" stroke="#151626" stroke-width="4" filter="url(#y-shadow)"/><path d="M27 37h12v12H27zm12 12h12v12H39zm12-12h12v12H51zm12 12h12v12H63zM51 61h12v12H51Z" fill="#fff" opacity=".9"/><ellipse cx="50" cy="50" rx="45" ry="16" fill="none" stroke="#151626" stroke-width="6" transform="rotate(-14 50 50)"/><ellipse cx="50" cy="50" rx="45" ry="16" fill="none" stroke="#fff" stroke-width="2" transform="rotate(-14 50 50)"/>`),
+    },
+    {
+      id: "y2k-ok-window",
+      label: "OK 창",
+      group: "y2k",
+      svg: y2k(`<g filter="url(#y-shadow)"><path d="M8 18h84v66H8Z" fill="#eee9df" stroke="#151626" stroke-width="4"/><path d="M12 22h76v16H12Z" fill="#3259d9"/><text x="18" y="34" font-family="monospace" font-size="11" font-weight="700" fill="#fff">MESSAGE</text><path d="M75 25h10v10H75Z" fill="#fff"/><path d="m77 27 6 6m0-6-6 6" stroke="#151626" stroke-width="2"/><text x="50" y="57" text-anchor="middle" font-family="monospace" font-size="13" font-weight="700" fill="#151626">ARE U OK?</text><path d="M35 64h30v13H35Z" fill="#fff" stroke="#151626" stroke-width="2"/><text x="50" y="74" text-anchor="middle" font-family="monospace" font-size="10" font-weight="700" fill="#151626">YES</text></g>`),
+    },
+    {
+      id: "y2k-pink-laptop",
+      label: "핑크 노트북",
+      group: "y2k",
+      svg: y2k(`<g filter="url(#y-shadow)"><path d="M20 13h60v50H20Z" fill="#ff9dce" stroke="#151626" stroke-width="4"/><path d="M27 20h46v35H27Z" fill="#bdf8ff" stroke="#fff" stroke-width="3"/><path d="M11 67h78l-8 19H19Z" fill="#ffc2e1" stroke="#151626" stroke-width="4"/><path d="M39 71h22l4 8H35Z" fill="#fff" stroke="#151626" stroke-width="2"/><path d="m50 27 4 9 10 1-8 7 3 10-9-6-9 6 3-10-8-7 10-1Z" fill="#fff" stroke="#6c66a4" stroke-width="2"/></g>`),
     },
     {
       id: "pixel-yes",

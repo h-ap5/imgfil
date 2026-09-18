@@ -63,6 +63,25 @@ const elements = {
   filmFrameStatus: $("#film-frame-status"),
   filmSlotList: $("#film-slot-list"),
   xpOverlayButtons: $$('[data-xp-overlay]'),
+  digicamFrameButtons: $$('[data-digicam-frame]'),
+  vnModeButtons: $$('[data-vn-mode]'),
+  vnStyleButtons: $$('[data-vn-style]'),
+  vnFontButtons: $$('[data-vn-font]'),
+  vnTools: $("#vn-tools"),
+  vnSceneTools: $("#vn-scene-tools"),
+  vnName: $("#vn-name"),
+  vnDialogue: $("#vn-dialogue"),
+  vnBackgroundInput: $("#vn-background-input"),
+  vnCharacterInput: $("#vn-character-input"),
+  uploadVnBackground: $("#upload-vn-background"),
+  uploadVnCharacter: $("#upload-vn-character"),
+  vnBackgroundStatus: $("#vn-background-status"),
+  vnCharacterStatus: $("#vn-character-status"),
+  vnCharacterSize: $("#vn-character-size"),
+  vnCharacterSizeValue: $("#vn-character-size-value"),
+  vnCharacterX: $("#vn-character-x"),
+  vnCharacterXValue: $("#vn-character-x-value"),
+  clearVnAssets: $("#clear-vn-assets"),
 };
 
 const state = {
@@ -96,6 +115,16 @@ const state = {
   filmFrameImages: [],
   pendingFilmSlot: null,
   xpOverlay: false,
+  digicamFrame: false,
+  vnMode: "off",
+  vnStyle: "classic",
+  vnFont: "pixel",
+  vnName: "이름",
+  vnDialogue: "대사를 입력하세요.",
+  vnBackground: null,
+  vnCharacter: null,
+  vnCharacterScale: 0.78,
+  vnCharacterX: 0.68,
 };
 
 const stickerCatalog = window.STICKER_CATALOG || [];
@@ -104,6 +133,13 @@ const stickerDefinitions = new Map(stickerCatalog.map((sticker) => [sticker.id, 
 const stickerAssets = new Map();
 const customStickerUrls = new Set();
 const filmFrameUrls = new Set();
+const vnAssetUrls = new Set();
+const heartTunnelTexture = new Image();
+heartTunnelTexture.decoding = "async";
+heartTunnelTexture.onload = () => {
+  if (state.image && state.filter === "hearttunnel") scheduleRender();
+};
+heartTunnelTexture.src = "assets/heart-tunnel.png";
 
 const filterNames = {
   softcam: "흐릿한 아이폰",
@@ -756,58 +792,11 @@ function addHeartPath(ctx, x, y, size) {
   ctx.closePath();
 }
 
-function addSparklePath(ctx, x, y, radius) {
-  ctx.beginPath();
-  ctx.moveTo(x, y - radius);
-  ctx.quadraticCurveTo(x + radius * 0.16, y - radius * 0.16, x + radius, y);
-  ctx.quadraticCurveTo(x + radius * 0.16, y + radius * 0.16, x, y + radius);
-  ctx.quadraticCurveTo(x - radius * 0.16, y + radius * 0.16, x - radius, y);
-  ctx.quadraticCurveTo(x - radius * 0.16, y - radius * 0.16, x, y - radius);
-  ctx.closePath();
-}
-
 function applyHeartTunnel(ctx, width, height, strength) {
-  if (strength <= 0.01) return;
-  const minSide = Math.min(width, height);
-  const centerX = width * 0.5;
-  const centerY = height * 0.48;
-  const alpha = Math.pow(strength, 0.88);
-
+  if (strength <= 0.01 || !heartTunnelTexture.complete || !heartTunnelTexture.naturalWidth) return;
   ctx.save();
-  ctx.fillStyle = `rgba(232,129,176,${0.08 + alpha * 0.18})`;
-  ctx.fillRect(0, 0, width, height);
-
-  const sizes = [2.45, 1.94, 1.5, 1.12, 0.79, 0.5, 0.27];
-  sizes.forEach((scale, index) => {
-    ctx.save();
-    ctx.globalCompositeOperation = index % 2 === 0 ? "screen" : "soft-light";
-    ctx.globalAlpha = (index % 2 === 0 ? 0.32 : 0.5) * alpha;
-    ctx.strokeStyle = index % 2 === 0 ? "#fff8fc" : "#ec8db8";
-    ctx.lineWidth = minSide * Math.max(0.055, 0.13 - index * 0.011);
-    ctx.lineJoin = "round";
-    ctx.shadowColor = index % 2 === 0 ? "rgba(255,255,255,.92)" : "rgba(255,128,184,.72)";
-    ctx.shadowBlur = minSide * (0.02 + alpha * 0.025);
-    addHeartPath(ctx, centerX, centerY, minSide * scale);
-    ctx.stroke();
-    ctx.restore();
-  });
-
-  const sparkles = [
-    [0.12, 0.18, 0.022],
-    [0.82, 0.13, 0.018],
-    [0.9, 0.42, 0.025],
-    [0.18, 0.72, 0.017],
-    [0.73, 0.82, 0.021],
-    [0.36, 0.28, 0.013],
-  ];
-  ctx.globalCompositeOperation = "screen";
-  ctx.fillStyle = `rgba(255,255,255,${0.28 + alpha * 0.58})`;
-  ctx.shadowColor = "rgba(255,255,255,.92)";
-  ctx.shadowBlur = minSide * 0.018;
-  sparkles.forEach(([x, y, radius]) => {
-    addSparklePath(ctx, width * x, height * y, minSide * radius);
-    ctx.fill();
-  });
+  ctx.globalAlpha = 0.05 + Math.pow(strength, 1.1) * 0.77;
+  drawImageCover(ctx, heartTunnelTexture, 0, 0, width, height);
   ctx.restore();
 }
 
@@ -1390,7 +1379,8 @@ function randomizeStickers() {
   state.selectedStickerId = state.stickers.at(-1)?.uid || null;
   updateStickerUI();
   scheduleRender();
-  showToast(`${state.stickerGroup === "pixel" ? "픽셀" : "홀로"} 스티커를 랜덤 배치했어요.`);
+  const groupNames = { holo: "홀로", y2k: "Y2K", pixel: "픽셀", custom: "내" };
+  showToast(`${groupNames[state.stickerGroup] || "선택한"} 스티커를 랜덤 배치했어요.`);
 }
 
 function clearStickers() {
@@ -1497,7 +1487,21 @@ function canvasPointFromEvent(event) {
   const cssX = event.clientX - rect.left - offsetX;
   const cssY = event.clientY - rect.top - offsetY;
   if (cssX < 0 || cssY < 0 || cssX > shownWidth || cssY > shownHeight) return null;
-  return { x: cssX / scale, y: cssY / scale };
+  const point = { x: cssX / scale, y: cssY / scale };
+  let contentRect = null;
+  if (state.digicamFrame) contentRect = getDigicamLayout(elements.canvas.width, elements.canvas.height).screen;
+  else if (state.xpOverlay) contentRect = getXpImageRect(elements.canvas.width, elements.canvas.height);
+  if (!contentRect) return point;
+  if (
+    point.x < contentRect.x
+    || point.y < contentRect.y
+    || point.x > contentRect.x + contentRect.width
+    || point.y > contentRect.y + contentRect.height
+  ) return null;
+  return {
+    x: (point.x - contentRect.x) / contentRect.width * elements.canvas.width,
+    y: (point.y - contentRect.y) / contentRect.height * elements.canvas.height,
+  };
 }
 
 function findStickerAt(point) {
@@ -1656,7 +1660,7 @@ function updatePatternUI() {
 }
 
 function updateOverlayUI() {
-  const cameraEnabled = state.cameraOverlay !== "off";
+  const cameraEnabled = state.cameraOverlay !== "off" || state.digicamFrame;
   elements.rotateCameraLeft.disabled = !cameraEnabled;
   elements.rotateCameraRight.disabled = !cameraEnabled;
   elements.cameraRotationValue.textContent = `${state.cameraRotation}°`;
@@ -1671,6 +1675,85 @@ function updateOverlayUI() {
     : "현재 사진 반복";
   setNormalizedRangeFill(elements.filmFrameCount);
   renderFilmSlotList();
+}
+
+function updateVnUI() {
+  const enabled = state.vnMode !== "off";
+  const sceneMode = state.vnMode === "scene";
+  elements.vnTools.hidden = !enabled;
+  elements.vnSceneTools.hidden = !sceneMode;
+  elements.uploadVnBackground.disabled = false;
+  elements.uploadVnCharacter.disabled = !state.image && !state.vnBackground;
+  elements.clearVnAssets.disabled = !state.vnBackground && !state.vnCharacter;
+  elements.vnCharacterSize.disabled = !state.vnCharacter;
+  elements.vnCharacterX.disabled = !state.vnCharacter;
+  elements.vnBackgroundStatus.textContent = state.vnBackground
+    ? `배경: ${state.vnBackground.name}`
+    : "기본 사진을 배경으로 사용";
+  elements.vnCharacterStatus.textContent = state.vnCharacter
+    ? `캐릭터: ${state.vnCharacter.name}`
+    : "캐릭터 없음";
+  elements.vnCharacterSize.value = String(Math.round(state.vnCharacterScale * 100));
+  elements.vnCharacterSizeValue.textContent = `${Math.round(state.vnCharacterScale * 100)}%`;
+  elements.vnCharacterX.value = String(Math.round(state.vnCharacterX * 100));
+  elements.vnCharacterXValue.textContent = `${Math.round(state.vnCharacterX * 100)}%`;
+  setNormalizedRangeFill(elements.vnCharacterSize);
+  setNormalizedRangeFill(elements.vnCharacterX);
+}
+
+function releaseVnAsset(asset) {
+  if (!asset) return;
+  URL.revokeObjectURL(asset.url);
+  vnAssetUrls.delete(asset.url);
+}
+
+function clearVnAssets() {
+  releaseVnAsset(state.vnBackground);
+  releaseVnAsset(state.vnCharacter);
+  state.vnBackground = null;
+  state.vnCharacter = null;
+  elements.vnBackgroundInput.value = "";
+  elements.vnCharacterInput.value = "";
+  updateVnUI();
+}
+
+function loadVnAsset(file, kind) {
+  if (kind === "character" && !state.image && !state.vnBackground) {
+    showToast("배경 이미지를 먼저 불러와 주세요.");
+    return;
+  }
+  if (!file || !file.type.startsWith("image/") || file.size > 30 * 1024 * 1024) {
+    showToast("30MB 이하의 이미지 파일을 선택해 주세요.");
+    return;
+  }
+  if (kind === "character" && !["image/png", "image/webp"].includes(file.type)) {
+    showToast("누끼 캐릭터는 투명 PNG 또는 WEBP를 사용해 주세요.");
+    return;
+  }
+
+  const url = URL.createObjectURL(file);
+  const image = new Image();
+  image.decoding = "async";
+  image.onload = () => {
+    const key = kind === "background" ? "vnBackground" : "vnCharacter";
+    releaseVnAsset(state[key]);
+    state[key] = { image, url, name: file.name };
+    vnAssetUrls.add(url);
+    if (kind === "background" && !state.image) {
+      state.image = image;
+      state.fileName = file.name;
+      state.seed = Math.floor(Math.random() * 100000);
+      updateLoadedUI(file);
+    }
+    updateVnUI();
+    scheduleRender();
+    showToast(kind === "background" ? "미연시 배경을 불러왔어요." : "누끼 캐릭터를 불러왔어요.");
+  };
+  image.onerror = () => {
+    URL.revokeObjectURL(url);
+    showToast("이미지를 읽지 못했어요.");
+  };
+  image.src = url;
 }
 
 function clearFilmFrameImages() {
@@ -2163,6 +2246,143 @@ function renderFilmFrame(image, width, height, seed, originalOnly = false, anima
   return canvas;
 }
 
+function drawVnCharacter(ctx, width, height) {
+  const asset = state.vnCharacter?.image;
+  if (!asset?.naturalWidth) return;
+  const aspect = asset.naturalWidth / asset.naturalHeight;
+  let targetHeight = height * state.vnCharacterScale;
+  let targetWidth = targetHeight * aspect;
+  if (targetWidth > width * 0.92) {
+    const correction = width * 0.92 / targetWidth;
+    targetWidth *= correction;
+    targetHeight *= correction;
+  }
+  const x = width * state.vnCharacterX - targetWidth / 2;
+  const y = height - targetHeight;
+  ctx.save();
+  ctx.shadowColor = "rgba(12,14,30,.34)";
+  ctx.shadowBlur = Math.max(4, Math.min(width, height) * 0.018);
+  ctx.shadowOffsetX = -Math.min(width, height) * 0.006;
+  ctx.drawImage(asset, x, y, targetWidth, targetHeight);
+  ctx.restore();
+}
+
+function wrapVnText(ctx, text, maxWidth, maxLines) {
+  const lines = [];
+  let line = "";
+  for (const character of [...text]) {
+    if (character === "\n") {
+      lines.push(line);
+      line = "";
+      if (lines.length >= maxLines) break;
+      continue;
+    }
+    const candidate = line + character;
+    if (line && ctx.measureText(candidate).width > maxWidth) {
+      lines.push(line);
+      line = character.trimStart();
+      if (lines.length >= maxLines) break;
+    } else {
+      line = candidate;
+    }
+  }
+  if (lines.length < maxLines && line) lines.push(line);
+  if (lines.length === maxLines && ctx.measureText(lines.at(-1)).width > maxWidth * 0.96) {
+    lines[lines.length - 1] = `${lines.at(-1).slice(0, -1)}…`;
+  }
+  return lines;
+}
+
+function drawVnDialogue(ctx, width, height) {
+  if (state.vnMode === "off") return;
+  const minSide = Math.min(width, height);
+  const margin = Math.max(12, minSide * 0.038);
+  const boxHeight = Math.max(minSide * 0.25, height * 0.23);
+  const x = margin;
+  const y = height - boxHeight - margin;
+  const boxWidth = width - margin * 2;
+  const lineWidth = Math.max(2, minSide * 0.004);
+  const nameHeight = Math.max(30, boxHeight * 0.25);
+  const nameSize = Math.max(12, Math.round(minSide * 0.026));
+  const fontFamily = state.vnFont === "serif"
+    ? '"Batang", "Times New Roman", serif'
+    : '"Mona12", "Dotum", sans-serif';
+  ctx.save();
+  ctx.font = `700 ${nameSize}px ${fontFamily}`;
+  const nameWidth = Math.min(boxWidth * 0.42, Math.max(boxWidth * 0.2, ctx.measureText(state.vnName).width + margin * 2.2));
+  const styles = {
+    classic: {
+      box: "rgba(17,22,52,.86)",
+      border: "rgba(218,228,255,.94)",
+      accent: "#8fb5ff",
+      text: "#fffdf7",
+      shadow: "rgba(5,8,24,.48)",
+    },
+    pink: {
+      box: "rgba(255,232,242,.9)",
+      border: "rgba(255,255,255,.96)",
+      accent: "#e46a9f",
+      text: "#48273b",
+      shadow: "rgba(126,54,91,.28)",
+    },
+    cyber: {
+      box: "rgba(10,12,24,.9)",
+      border: "#76f7ee",
+      accent: "#ff6fca",
+      text: "#efffff",
+      shadow: "rgba(0,237,255,.26)",
+    },
+  };
+  const theme = styles[state.vnStyle] || styles.classic;
+
+  ctx.shadowColor = theme.shadow;
+  ctx.shadowBlur = minSide * 0.022;
+  ctx.shadowOffsetY = minSide * 0.008;
+  ctx.fillStyle = theme.box;
+  ctx.fillRect(x, y, boxWidth, boxHeight);
+  ctx.shadowColor = "transparent";
+  ctx.strokeStyle = theme.border;
+  ctx.lineWidth = lineWidth;
+  ctx.strokeRect(x + lineWidth / 2, y + lineWidth / 2, boxWidth - lineWidth, boxHeight - lineWidth);
+  ctx.strokeStyle = theme.accent;
+  ctx.lineWidth = lineWidth * 0.65;
+  ctx.strokeRect(x + lineWidth * 2.4, y + lineWidth * 2.4, boxWidth - lineWidth * 4.8, boxHeight - lineWidth * 4.8);
+
+  ctx.fillStyle = theme.accent;
+  ctx.fillRect(x + margin * 0.55, y - nameHeight * 0.38, nameWidth, nameHeight);
+  ctx.strokeStyle = theme.border;
+  ctx.lineWidth = lineWidth;
+  ctx.strokeRect(x + margin * 0.55, y - nameHeight * 0.38, nameWidth, nameHeight);
+
+  const bodySize = Math.max(14, Math.round(minSide * 0.031));
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "left";
+  ctx.fillStyle = state.vnStyle === "pink" ? "#fff" : theme.text;
+  ctx.font = `700 ${nameSize}px ${fontFamily}`;
+  ctx.fillText(state.vnName || "이름", x + margin * 1.05, y + nameHeight * 0.12);
+
+  ctx.fillStyle = theme.text;
+  ctx.font = `400 ${bodySize}px ${fontFamily}`;
+  ctx.textBaseline = "top";
+  const textX = x + margin * 1.15;
+  const textY = y + nameHeight * 0.78;
+  const maxWidth = boxWidth - margin * 2.3;
+  const lineHeight = bodySize * 1.55;
+  wrapVnText(ctx, state.vnDialogue || "대사를 입력하세요.", maxWidth, 3).forEach((line, index) => {
+    ctx.fillText(line, textX, textY + index * lineHeight);
+  });
+
+  ctx.fillStyle = theme.accent;
+  const marker = Math.max(5, minSide * 0.009);
+  ctx.beginPath();
+  ctx.moveTo(x + boxWidth - margin * 0.9, y + boxHeight - margin * 0.72);
+  ctx.lineTo(x + boxWidth - margin * 0.9 + marker, y + boxHeight - margin * 0.72);
+  ctx.lineTo(x + boxWidth - margin * 0.9 + marker * 0.5, y + boxHeight - margin * 0.72 + marker);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
 function composeFilmStrip(
   targetCanvas,
   maxSide,
@@ -2244,6 +2464,24 @@ function composeFilmStrip(
   }
   ctx.restore();
   return { width, height };
+}
+
+function getXpImageRect(width, height) {
+  const minSide = Math.min(width, height);
+  const unit = Math.max(1, minSide * 0.003);
+  const titleHeight = Math.max(24, height * 0.052);
+  const windowX = width * 0.13;
+  const windowY = height * 0.12;
+  const windowW = width * 0.72;
+  const windowH = height * 0.7;
+  const menuHeight = Math.max(18, height * 0.04);
+  return {
+    x: windowX + windowW * 0.025,
+    y: windowY + titleHeight + menuHeight + windowH * 0.025,
+    width: windowW * 0.95,
+    height: windowH - titleHeight - menuHeight - windowH * 0.065,
+    unit,
+  };
 }
 
 function composeXpDesktop(canvas, width, height) {
@@ -2357,10 +2595,11 @@ function composeXpDesktop(canvas, width, height) {
   ctx.font = `400 ${Math.max(8, Math.round(fontSize * 0.84))}px "Mona12", "Courier New", monospace`;
   ctx.fillText("File   Edit   View   Image   Help", windowX + menuHeight * 0.35, windowY + titleHeight + menuHeight * 0.52);
 
-  const imageX = windowX + windowW * 0.025;
-  const imageY = windowY + titleHeight + menuHeight + windowH * 0.025;
-  const imageW = windowW * 0.95;
-  const imageH = windowH - titleHeight - menuHeight - windowH * 0.065;
+  const imageRect = getXpImageRect(width, height);
+  const imageX = imageRect.x;
+  const imageY = imageRect.y;
+  const imageW = imageRect.width;
+  const imageH = imageRect.height;
   ctx.fillStyle = "#121722";
   ctx.fillRect(imageX - unit * 2, imageY - unit * 2, imageW + unit * 4, imageH + unit * 4);
   ctx.save();
@@ -2560,6 +2799,147 @@ function drawDigicamUiLayer(ctx, width, height) {
   ctx.restore();
 }
 
+function getDigicamLayout(width, height) {
+  const quarterTurn = state.cameraRotation % 180 !== 0;
+  const reverse = state.cameraRotation === 180 || state.cameraRotation === 270;
+  if (quarterTurn) {
+    const body = { x: width * 0.09, y: height * 0.025, width: width * 0.82, height: height * 0.95 };
+    const railHeight = body.height * 0.18;
+    const gap = body.height * 0.045;
+    return {
+      quarterTurn,
+      reverse,
+      body,
+      rail: {
+        x: body.x,
+        y: reverse ? body.y : body.y + body.height - railHeight,
+        width: body.width,
+        height: railHeight,
+      },
+      screen: {
+        x: body.x + body.width * 0.075,
+        y: reverse ? body.y + railHeight + gap : body.y + gap,
+        width: body.width * 0.85,
+        height: body.height - railHeight - gap * 1.55,
+      },
+    };
+  }
+
+  const body = { x: width * 0.025, y: height * 0.09, width: width * 0.95, height: height * 0.82 };
+  const railWidth = body.width * 0.18;
+  const gap = body.width * 0.04;
+  return {
+    quarterTurn,
+    reverse,
+    body,
+    rail: {
+      x: reverse ? body.x : body.x + body.width - railWidth,
+      y: body.y,
+      width: railWidth,
+      height: body.height,
+    },
+    screen: {
+      x: reverse ? body.x + railWidth + gap : body.x + gap,
+      y: body.y + body.height * 0.09,
+      width: body.width - railWidth - gap * 1.55,
+      height: body.height * 0.78,
+    },
+  };
+}
+
+function composeDigicamFrame(canvas, width, height) {
+  const source = snapshotCanvas(canvas);
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  const { body, screen, rail, quarterTurn } = getDigicamLayout(width, height);
+  const minSide = Math.min(width, height);
+  const unit = Math.max(1, minSide * 0.004);
+  ctx.clearRect(0, 0, width, height);
+
+  const backdrop = ctx.createRadialGradient(width * 0.48, height * 0.46, 0, width * 0.48, height * 0.46, Math.max(width, height) * 0.7);
+  backdrop.addColorStop(0, "#343640");
+  backdrop.addColorStop(0.72, "#111219");
+  backdrop.addColorStop(1, "#07080d");
+  ctx.fillStyle = backdrop;
+  ctx.fillRect(0, 0, width, height);
+
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,.72)";
+  ctx.shadowBlur = minSide * 0.05;
+  ctx.shadowOffsetY = minSide * 0.022;
+  const shell = ctx.createLinearGradient(body.x, body.y, body.x + body.width, body.y + body.height);
+  shell.addColorStop(0, "#5b5d66");
+  shell.addColorStop(0.18, "#20222b");
+  shell.addColorStop(0.72, "#101117");
+  shell.addColorStop(1, "#464852");
+  ctx.fillStyle = shell;
+  ctx.fillRect(body.x, body.y, body.width, body.height);
+  ctx.restore();
+  ctx.strokeStyle = "#777a84";
+  ctx.lineWidth = unit * 1.2;
+  ctx.strokeRect(body.x + unit, body.y + unit, body.width - unit * 2, body.height - unit * 2);
+  ctx.strokeStyle = "#06070b";
+  ctx.lineWidth = unit * 2;
+  ctx.strokeRect(screen.x - unit * 2, screen.y - unit * 2, screen.width + unit * 4, screen.height + unit * 4);
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(screen.x, screen.y, screen.width, screen.height);
+  ctx.clip();
+  drawImageCover(ctx, source, screen.x, screen.y, screen.width, screen.height);
+  ctx.translate(screen.x, screen.y);
+  drawDigicamUiLayer(ctx, screen.width, screen.height);
+  const glare = ctx.createLinearGradient(0, 0, screen.width, screen.height);
+  glare.addColorStop(0, "rgba(255,255,255,.09)");
+  glare.addColorStop(0.34, "rgba(255,255,255,0)");
+  glare.addColorStop(1, "rgba(135,190,255,.04)");
+  ctx.fillStyle = glare;
+  ctx.fillRect(0, 0, screen.width, screen.height);
+  ctx.restore();
+
+  ctx.save();
+  ctx.fillStyle = "#090a0f";
+  ctx.fillRect(rail.x, rail.y, rail.width, rail.height);
+  ctx.strokeStyle = "#565965";
+  ctx.lineWidth = unit;
+  ctx.strokeRect(rail.x + unit, rail.y + unit, rail.width - unit * 2, rail.height - unit * 2);
+  const centerX = rail.x + rail.width * 0.5;
+  const centerY = rail.y + rail.height * 0.48;
+  const dialRadius = Math.min(rail.width, rail.height) * (quarterTurn ? 0.16 : 0.25);
+  ctx.fillStyle = "#2f323b";
+  ctx.strokeStyle = "#8a8d97";
+  ctx.lineWidth = unit * 1.2;
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, dialRadius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = "#11131a";
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, dialRadius * 0.42, 0, Math.PI * 2);
+  ctx.fill();
+  const buttonRadius = dialRadius * 0.28;
+  const offset = quarterTurn ? rail.width * 0.28 : rail.height * 0.25;
+  [[quarterTurn ? -offset : 0, quarterTurn ? 0 : -offset], [quarterTurn ? offset : 0, quarterTurn ? 0 : offset]]
+    .forEach(([dx, dy], index) => {
+      ctx.fillStyle = index === 0 ? "#767985" : "#262832";
+      ctx.beginPath();
+      ctx.arc(centerX + dx, centerY + dy, buttonRadius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    });
+  ctx.fillStyle = "#d8d9df";
+  ctx.font = `700 ${Math.max(8, Math.round(minSide * 0.018))}px "Mona12", "Courier New", monospace`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("DIGITAL", centerX, rail.y + rail.height * 0.12);
+  ctx.restore();
+
+  ctx.fillStyle = "#c7cad3";
+  ctx.font = `700 ${Math.max(9, Math.round(minSide * 0.021))}px "Mona12", "Courier New", monospace`;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  ctx.fillText("FILTER_2000  3.2 MEGA PIXELS", body.x + body.width * 0.05, body.y + body.height * 0.955);
+}
+
 function drawCameraOverlay(ctx, width, height) {
   if (state.cameraOverlay === "off") return;
   const radians = state.cameraRotation * Math.PI / 180;
@@ -2584,7 +2964,10 @@ function drawProcessed(
 ) {
   if (!state.image) return null;
 
-  const crop = getCrop(state.image.naturalWidth, state.image.naturalHeight, state.ratio);
+  const sourceImage = state.vnMode === "scene" && state.vnBackground?.image
+    ? state.vnBackground.image
+    : state.image;
+  const crop = getCrop(sourceImage.naturalWidth, sourceImage.naturalHeight, state.ratio);
   const output = getOutputSize(crop, maxSide);
   targetCanvas.width = output.width;
   targetCanvas.height = output.height;
@@ -2597,7 +2980,7 @@ function drawProcessed(
     : state.filter;
   ctx.filter = originalOnly ? "none" : presetFilter(presetName, state.strength);
   ctx.drawImage(
-    state.image,
+    sourceImage,
     crop.sx,
     crop.sy,
     crop.sw,
@@ -2607,6 +2990,9 @@ function drawProcessed(
     output.width,
     output.height,
   );
+  if (state.vnMode === "scene" && state.vnCharacter) {
+    drawVnCharacter(ctx, output.width, output.height);
+  }
   ctx.filter = "none";
 
   if (!originalOnly) {
@@ -2617,13 +3003,15 @@ function drawProcessed(
     finalOutput = composeFilmStrip(targetCanvas, maxSide, originalOnly, animationPhase, renderSeed);
   }
   if (originalOnly) return finalOutput;
-  if (state.xpOverlay) composeXpDesktop(targetCanvas, finalOutput.width, finalOutput.height);
   const finalCtx = targetCanvas.getContext("2d", { willReadFrequently: true });
   const showStickerSelection = targetCanvas === elements.canvas
     && !(state.filter === "liquify" && state.liquifyMode === "brush");
   drawStickers(finalCtx, finalOutput.width, finalOutput.height, showStickerSelection);
   if (state.showDate) addDateStamp(finalCtx, finalOutput.width, finalOutput.height);
-  drawCameraOverlay(finalCtx, finalOutput.width, finalOutput.height);
+  drawVnDialogue(finalCtx, finalOutput.width, finalOutput.height);
+  if (state.xpOverlay) composeXpDesktop(targetCanvas, finalOutput.width, finalOutput.height);
+  if (state.digicamFrame) composeDigicamFrame(targetCanvas, finalOutput.width, finalOutput.height);
+  else drawCameraOverlay(finalCtx, finalOutput.width, finalOutput.height);
 
   return finalOutput;
 }
@@ -2653,6 +3041,7 @@ function updateLoadedUI(file) {
   elements.fileMeta.textContent = `${state.fileName.toUpperCase()} · ${state.image.naturalWidth} × ${state.image.naturalHeight} · ${sizeMb}`;
   updateStickerUI();
   updateOverlayUI();
+  updateVnUI();
 }
 
 async function loadFile(file) {
@@ -2702,6 +3091,7 @@ function resetEditor() {
   state.liquifyStrokes = [];
   cancelActiveLiquifyPaint();
   clearFilmFrameImages();
+  clearVnAssets();
   elements.canvas.classList.remove("is-dragging-sticker", "is-resizing-sticker", "is-painting-liquify");
   elements.canvas.width = 0;
   elements.canvas.height = 0;
@@ -2717,6 +3107,7 @@ function resetEditor() {
   updateLiquifyUI();
   updatePatternUI();
   updateOverlayUI();
+  updateVnUI();
   showToast("편집기를 비웠어요.");
 }
 
@@ -2952,11 +3343,37 @@ elements.cameraOverlayButtons.forEach((button) => {
 elements.xpOverlayButtons.forEach((button) => {
   button.addEventListener("click", () => {
     state.xpOverlay = button.dataset.xpOverlay === "on";
+    if (state.xpOverlay) state.digicamFrame = false;
     elements.xpOverlayButtons.forEach((item) => {
       const selected = item === button;
       item.classList.toggle("is-selected", selected);
       item.setAttribute("aria-pressed", String(selected));
     });
+    elements.digicamFrameButtons.forEach((item) => {
+      const selected = item.dataset.digicamFrame === (state.digicamFrame ? "on" : "off");
+      item.classList.toggle("is-selected", selected);
+      item.setAttribute("aria-pressed", String(selected));
+    });
+    updateOverlayUI();
+    scheduleRender();
+  });
+});
+
+elements.digicamFrameButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    state.digicamFrame = button.dataset.digicamFrame === "on";
+    if (state.digicamFrame) state.xpOverlay = false;
+    elements.digicamFrameButtons.forEach((item) => {
+      const selected = item === button;
+      item.classList.toggle("is-selected", selected);
+      item.setAttribute("aria-pressed", String(selected));
+    });
+    elements.xpOverlayButtons.forEach((item) => {
+      const selected = item.dataset.xpOverlay === (state.xpOverlay ? "on" : "off");
+      item.classList.toggle("is-selected", selected);
+      item.setAttribute("aria-pressed", String(selected));
+    });
+    updateOverlayUI();
     scheduleRender();
   });
 });
@@ -3000,6 +3417,77 @@ elements.filmSlotInput.addEventListener("change", () => {
 });
 elements.clearFilmFrames.addEventListener("click", () => {
   clearFilmFrameImages();
+  scheduleRender();
+});
+
+elements.vnModeButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    state.vnMode = button.dataset.vnMode;
+    elements.vnModeButtons.forEach((item) => {
+      const selected = item === button;
+      item.classList.toggle("is-selected", selected);
+      item.setAttribute("aria-pressed", String(selected));
+    });
+    updateVnUI();
+    scheduleRender();
+  });
+});
+
+elements.vnStyleButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    state.vnStyle = button.dataset.vnStyle;
+    elements.vnStyleButtons.forEach((item) => {
+      const selected = item === button;
+      item.classList.toggle("is-selected", selected);
+      item.setAttribute("aria-pressed", String(selected));
+    });
+    scheduleRender();
+  });
+});
+
+elements.vnFontButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    state.vnFont = button.dataset.vnFont;
+    elements.vnFontButtons.forEach((item) => {
+      const selected = item === button;
+      item.classList.toggle("is-selected", selected);
+      item.setAttribute("aria-pressed", String(selected));
+    });
+    scheduleRender();
+  });
+});
+
+elements.vnName.addEventListener("input", () => {
+  state.vnName = elements.vnName.value;
+  scheduleRender();
+});
+
+elements.vnDialogue.addEventListener("input", () => {
+  state.vnDialogue = elements.vnDialogue.value;
+  scheduleRender();
+});
+
+elements.uploadVnBackground.addEventListener("click", () => elements.vnBackgroundInput.click());
+elements.uploadVnCharacter.addEventListener("click", () => elements.vnCharacterInput.click());
+elements.vnBackgroundInput.addEventListener("change", () => loadVnAsset(elements.vnBackgroundInput.files[0], "background"));
+elements.vnCharacterInput.addEventListener("change", () => loadVnAsset(elements.vnCharacterInput.files[0], "character"));
+
+elements.vnCharacterSize.addEventListener("input", () => {
+  state.vnCharacterScale = Number(elements.vnCharacterSize.value) / 100;
+  elements.vnCharacterSizeValue.textContent = `${elements.vnCharacterSize.value}%`;
+  setNormalizedRangeFill(elements.vnCharacterSize);
+  scheduleRender();
+});
+
+elements.vnCharacterX.addEventListener("input", () => {
+  state.vnCharacterX = Number(elements.vnCharacterX.value) / 100;
+  elements.vnCharacterXValue.textContent = `${elements.vnCharacterX.value}%`;
+  setNormalizedRangeFill(elements.vnCharacterX);
+  scheduleRender();
+});
+
+elements.clearVnAssets.addEventListener("click", () => {
+  clearVnAssets();
   scheduleRender();
 });
 
@@ -3050,6 +3538,7 @@ window.addEventListener("keydown", (event) => {
 window.addEventListener("beforeunload", () => {
   customStickerUrls.forEach((url) => URL.revokeObjectURL(url));
   filmFrameUrls.forEach((url) => URL.revokeObjectURL(url));
+  vnAssetUrls.forEach((url) => URL.revokeObjectURL(url));
 });
 
 ["pointerdown", "keydown"].forEach((type) => {
@@ -3073,8 +3562,11 @@ elements.dateInput.value = state.dateValue;
 setNormalizedRangeFill(elements.liquifyBrushSize);
 setNormalizedRangeFill(elements.patternPhase);
 setNormalizedRangeFill(elements.filmFrameCount);
+setNormalizedRangeFill(elements.vnCharacterSize);
+setNormalizedRangeFill(elements.vnCharacterX);
 updateLiquifyUI();
 updatePatternUI();
 updateOverlayUI();
+updateVnUI();
 updateDownloadButtonLabel();
 initializeStickerAssets();
