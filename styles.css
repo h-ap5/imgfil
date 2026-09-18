@@ -955,6 +955,49 @@ h2 {
   background: var(--ink-raised);
 }
 
+.vn-color-control {
+  display: grid;
+  gap: 16px;
+}
+
+.vn-color-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.vn-color-grid label {
+  display: grid;
+  grid-template-columns: 1fr 48px;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 4px 4px 4px 12px;
+  border: 2px solid var(--border-light);
+  color: var(--text);
+  background: var(--ink-soft);
+  font-size: 0.875rem;
+  font-weight: 900;
+}
+
+.vn-color-grid input[type="color"] {
+  width: 48px;
+  height: 40px;
+  padding: 4px;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+.vn-color-grid label:focus-within {
+  border-color: var(--cyan);
+}
+
+.vn-color-reset {
+  width: 100%;
+}
+
 .vn-scene-tools {
   display: grid;
   gap: 16px;

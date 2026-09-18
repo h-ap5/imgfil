@@ -72,6 +72,9 @@ const elements = {
   vnSceneTools: $("#vn-scene-tools"),
   vnName: $("#vn-name"),
   vnDialogue: $("#vn-dialogue"),
+  vnBoxColor: $("#vn-box-color"),
+  vnNameColor: $("#vn-name-color"),
+  resetVnColors: $("#reset-vn-colors"),
   vnBackgroundInput: $("#vn-background-input"),
   vnCharacterInput: $("#vn-character-input"),
   uploadVnBackground: $("#upload-vn-background"),
@@ -124,6 +127,8 @@ const state = {
   vnFont: "pixel",
   vnName: "이름",
   vnDialogue: "대사를 입력하세요.",
+  vnBoxColor: null,
+  vnNameColor: null,
   vnBackground: null,
   vnCharacter: null,
   vnCharacterScale: 0.78,
@@ -198,6 +203,50 @@ const filterNames = {
   milkyveil: "밀키 포트레이트",
   hearttunnel: "핑크 하트 터널",
 };
+
+const vnThemes = {
+  classic: {
+    box: "rgba(17,22,52,.86)",
+    boxInput: "#111634",
+    border: "rgba(218,228,255,.94)",
+    accent: "#8fb5ff",
+    text: "#fffdf7",
+    shadow: "rgba(5,8,24,.48)",
+  },
+  pink: {
+    box: "rgba(255,232,242,.9)",
+    boxInput: "#ffe8f2",
+    border: "rgba(255,255,255,.96)",
+    accent: "#e46a9f",
+    text: "#48273b",
+    shadow: "rgba(126,54,91,.28)",
+  },
+  cyber: {
+    box: "rgba(10,12,24,.9)",
+    boxInput: "#0a0c18",
+    border: "#76f7ee",
+    accent: "#ff6fca",
+    text: "#efffff",
+    shadow: "rgba(0,237,255,.26)",
+  },
+};
+
+function hexColorToRgba(hex, alpha) {
+  const value = hex.replace("#", "");
+  const red = Number.parseInt(value.slice(0, 2), 16);
+  const green = Number.parseInt(value.slice(2, 4), 16);
+  const blue = Number.parseInt(value.slice(4, 6), 16);
+  return `rgba(${red},${green},${blue},${alpha})`;
+}
+
+function readableTextColor(hex) {
+  const value = hex.replace("#", "");
+  const red = Number.parseInt(value.slice(0, 2), 16);
+  const green = Number.parseInt(value.slice(2, 4), 16);
+  const blue = Number.parseInt(value.slice(4, 6), 16);
+  const luminance = (red * 299 + green * 587 + blue * 114) / 255000;
+  return luminance > 0.58 ? "#171827" : "#fffdf7";
+}
 
 function formatDateInputValue(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -1771,6 +1820,7 @@ function syncCompositeOverlayButtons() {
 function updateVnUI() {
   const enabled = state.vnMode !== "off";
   const sceneMode = state.vnMode === "scene";
+  const theme = vnThemes[state.vnStyle] || vnThemes.classic;
   elements.vnTools.hidden = !enabled;
   elements.vnSceneTools.hidden = !sceneMode;
   elements.uploadVnBackground.disabled = false;
@@ -1788,6 +1838,9 @@ function updateVnUI() {
   elements.vnCharacterSizeValue.textContent = `${Math.round(state.vnCharacterScale * 100)}%`;
   elements.vnCharacterX.value = String(Math.round(state.vnCharacterX * 100));
   elements.vnCharacterXValue.textContent = `${Math.round(state.vnCharacterX * 100)}%`;
+  elements.vnBoxColor.value = state.vnBoxColor || theme.boxInput;
+  elements.vnNameColor.value = state.vnNameColor || theme.accent;
+  elements.resetVnColors.disabled = !state.vnBoxColor && !state.vnNameColor;
   setNormalizedRangeFill(elements.vnCharacterSize);
   setNormalizedRangeFill(elements.vnCharacterX);
 }
@@ -2397,78 +2450,77 @@ function drawVnDialogue(ctx, width, height) {
   const lineWidth = Math.max(2, minSide * 0.004);
   const nameHeight = Math.max(30, boxHeight * 0.25);
   const nameSize = Math.max(12, Math.round(minSide * 0.026));
+  const bodySize = Math.max(14, Math.round(minSide * 0.031));
   const fontFamily = state.vnFont === "serif"
     ? '"Batang", "Times New Roman", serif'
     : '"Mona12", "Dotum", sans-serif';
+  const theme = vnThemes[state.vnStyle] || vnThemes.classic;
+  const boxColor = state.vnBoxColor ? hexColorToRgba(state.vnBoxColor, 0.9) : theme.box;
+  const accentColor = state.vnNameColor || theme.accent;
+  const bodyTextColor = state.vnBoxColor ? readableTextColor(state.vnBoxColor) : theme.text;
+  const nameTextColor = state.vnNameColor
+    ? readableTextColor(state.vnNameColor)
+    : (state.vnStyle === "pink" ? "#fffdf7" : theme.text);
+  const displayName = state.vnName.trim() || "이름";
+  const nameX = x + margin * 0.55;
+  const nameY = y - nameHeight * 0.38;
+  const namePaddingX = Math.max(margin * 0.72, nameHeight * 0.3);
+  const maxNameWidth = boxWidth - margin * 1.1;
+
   ctx.save();
   ctx.font = `700 ${nameSize}px ${fontFamily}`;
-  const nameWidth = Math.min(boxWidth * 0.42, Math.max(boxWidth * 0.2, ctx.measureText(state.vnName).width + margin * 2.2));
-  const styles = {
-    classic: {
-      box: "rgba(17,22,52,.86)",
-      border: "rgba(218,228,255,.94)",
-      accent: "#8fb5ff",
-      text: "#fffdf7",
-      shadow: "rgba(5,8,24,.48)",
-    },
-    pink: {
-      box: "rgba(255,232,242,.9)",
-      border: "rgba(255,255,255,.96)",
-      accent: "#e46a9f",
-      text: "#48273b",
-      shadow: "rgba(126,54,91,.28)",
-    },
-    cyber: {
-      box: "rgba(10,12,24,.9)",
-      border: "#76f7ee",
-      accent: "#ff6fca",
-      text: "#efffff",
-      shadow: "rgba(0,237,255,.26)",
-    },
-  };
-  const theme = styles[state.vnStyle] || styles.classic;
+  const measuredNameWidth = ctx.measureText(displayName).width;
+  const nameWidth = Math.min(
+    maxNameWidth,
+    Math.max(boxWidth * 0.2, measuredNameWidth + namePaddingX * 2),
+  );
+  const availableNameTextWidth = Math.max(1, nameWidth - namePaddingX * 2);
+  const fittedNameSize = measuredNameWidth > availableNameTextWidth
+    ? Math.max(6, Math.floor(nameSize * availableNameTextWidth / measuredNameWidth))
+    : nameSize;
 
   ctx.shadowColor = theme.shadow;
   ctx.shadowBlur = minSide * 0.022;
   ctx.shadowOffsetY = minSide * 0.008;
-  ctx.fillStyle = theme.box;
+  ctx.fillStyle = boxColor;
   ctx.fillRect(x, y, boxWidth, boxHeight);
   ctx.shadowColor = "transparent";
   ctx.strokeStyle = theme.border;
   ctx.lineWidth = lineWidth;
   ctx.strokeRect(x + lineWidth / 2, y + lineWidth / 2, boxWidth - lineWidth, boxHeight - lineWidth);
-  ctx.strokeStyle = theme.accent;
+  ctx.strokeStyle = accentColor;
   ctx.lineWidth = lineWidth * 0.65;
   ctx.strokeRect(x + lineWidth * 2.4, y + lineWidth * 2.4, boxWidth - lineWidth * 4.8, boxHeight - lineWidth * 4.8);
 
-  ctx.fillStyle = theme.accent;
-  ctx.fillRect(x + margin * 0.55, y - nameHeight * 0.38, nameWidth, nameHeight);
+  ctx.fillStyle = accentColor;
+  ctx.fillRect(nameX, nameY, nameWidth, nameHeight);
   ctx.strokeStyle = theme.border;
   ctx.lineWidth = lineWidth;
-  ctx.strokeRect(x + margin * 0.55, y - nameHeight * 0.38, nameWidth, nameHeight);
+  ctx.strokeRect(nameX, nameY, nameWidth, nameHeight);
 
-  const bodySize = Math.max(14, Math.round(minSide * 0.031));
   ctx.textBaseline = "middle";
-  ctx.textAlign = "left";
-  ctx.fillStyle = state.vnStyle === "pink" ? "#fff" : theme.text;
-  ctx.font = `700 ${nameSize}px ${fontFamily}`;
-  ctx.fillText(state.vnName || "이름", x + margin * 1.05, y + nameHeight * 0.12);
+  ctx.textAlign = "center";
+  ctx.fillStyle = nameTextColor;
+  ctx.font = `700 ${fittedNameSize}px ${fontFamily}`;
+  ctx.fillText(displayName, nameX + nameWidth / 2, nameY + nameHeight / 2);
 
-  ctx.fillStyle = theme.text;
+  const contentPadding = Math.max(margin * 1.15, nameHeight * 1.08);
+  const marker = Math.max(11, minSide * 0.017);
+  ctx.fillStyle = bodyTextColor;
   ctx.font = `400 ${bodySize}px ${fontFamily}`;
   ctx.textBaseline = "top";
-  const textX = x + margin * 1.15;
-  const textY = y + nameHeight * 1.15;
-  const maxWidth = boxWidth - margin * 2.3;
+  ctx.textAlign = "left";
+  const textX = x + contentPadding;
+  const textY = y + contentPadding;
+  const maxWidth = Math.max(bodySize * 4, boxWidth - contentPadding * 2 - marker * 1.35);
   const lineHeight = bodySize * 1.55;
   wrapVnText(ctx, state.vnDialogue || "대사를 입력하세요.", maxWidth, 3).forEach((line, index) => {
     ctx.fillText(line, textX, textY + index * lineHeight);
   });
 
-  ctx.fillStyle = theme.accent;
-  const marker = Math.max(11, minSide * 0.017);
-  const markerX = x + boxWidth - margin * 1.45 - marker;
-  const markerY = y + boxHeight - margin * 1.35 - marker;
+  ctx.fillStyle = accentColor;
+  const markerX = x + boxWidth - contentPadding - marker;
+  const markerY = y + boxHeight - contentPadding - marker;
   ctx.beginPath();
   ctx.moveTo(markerX, markerY);
   ctx.lineTo(markerX + marker, markerY);
@@ -3602,6 +3654,7 @@ elements.vnStyleButtons.forEach((button) => {
       item.classList.toggle("is-selected", selected);
       item.setAttribute("aria-pressed", String(selected));
     });
+    updateVnUI();
     scheduleRender();
   });
 });
@@ -3625,6 +3678,25 @@ elements.vnName.addEventListener("input", () => {
 
 elements.vnDialogue.addEventListener("input", () => {
   state.vnDialogue = elements.vnDialogue.value;
+  scheduleRender();
+});
+
+elements.vnBoxColor.addEventListener("input", () => {
+  state.vnBoxColor = elements.vnBoxColor.value;
+  updateVnUI();
+  scheduleRender();
+});
+
+elements.vnNameColor.addEventListener("input", () => {
+  state.vnNameColor = elements.vnNameColor.value;
+  updateVnUI();
+  scheduleRender();
+});
+
+elements.resetVnColors.addEventListener("click", () => {
+  state.vnBoxColor = null;
+  state.vnNameColor = null;
+  updateVnUI();
   scheduleRender();
 });
 
