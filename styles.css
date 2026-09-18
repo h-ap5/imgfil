@@ -332,6 +332,15 @@ h2 {
   object-fit: contain;
 }
 
+.canvas-frame.has-image #preview-canvas {
+  cursor: grab;
+  touch-action: none;
+}
+
+.canvas-frame.has-image #preview-canvas.is-dragging-sticker {
+  cursor: grabbing;
+}
+
 .empty-state {
   position: absolute;
   z-index: 2;
@@ -550,6 +559,208 @@ h2 {
 .swatch-disposable::after { background: radial-gradient(circle at 50% 45%, rgba(255,255,255,.65), transparent 45%), rgba(255, 126, 55, .12); }
 .swatch-ccd { filter: contrast(0.9) saturate(0.85) hue-rotate(165deg); }
 .swatch-ccd::after { background: rgba(75, 131, 224, 0.22); }
+.swatch-liquify {
+  background-image:
+    repeating-radial-gradient(ellipse at 48% 15%, transparent 0 5px, #ff264f 6px 9px, #2438ff 10px 14px, transparent 15px 20px),
+    linear-gradient(90deg, #07071b, #e40053 42%, #2320db 66%, #05040d);
+}
+.swatch-liquify::after { background: linear-gradient(110deg, transparent, rgba(255, 21, 135, 0.42), transparent); }
+.swatch-signal { filter: contrast(1.35) saturate(1.8); }
+.swatch-signal::after {
+  background:
+    linear-gradient(90deg, rgba(255, 24, 56, 0.5), transparent 38%, rgba(0, 224, 255, 0.55)),
+    repeating-linear-gradient(0deg, transparent 0 7px, #090914 7px 10px, transparent 10px 15px);
+}
+.swatch-frameecho { filter: contrast(1.16) saturate(1.35); }
+.swatch-frameecho::after {
+  background:
+    linear-gradient(90deg, transparent 18%, rgba(255, 42, 65, 0.48) 19% 33%, transparent 34% 46%, rgba(0, 221, 238, 0.48) 47% 62%, transparent 63%),
+    repeating-linear-gradient(0deg, transparent 0 8px, rgba(10, 10, 20, 0.52) 8px 11px);
+}
+.swatch-prism { filter: brightness(1.12) contrast(0.84); }
+.swatch-prism::after {
+  background: conic-gradient(from 40deg at 50% 50%, rgba(255, 58, 104, 0.38), rgba(255, 211, 81, 0.24), rgba(74, 232, 213, 0.36), rgba(129, 80, 255, 0.34), rgba(255, 58, 104, 0.38));
+}
+.swatch-thermal {
+  background-image: linear-gradient(135deg, #130056 0 20%, #003cff 21% 38%, #00e5b8 39% 56%, #f4ee36 57% 73%, #ff4b18 74% 88%, #ff1493 89%);
+}
+.swatch-thermal::after { background: none; }
+.swatch-xerox {
+  background-color: #ebe7d8;
+  background-image: linear-gradient(135deg, transparent 42%, #11120f 43% 65%, transparent 66%), linear-gradient(#b7ff27 46%, #181913 47%);
+  filter: contrast(2.2) grayscale(0.35);
+}
+.swatch-xerox::after { background: repeating-radial-gradient(circle, transparent 0 2px, rgba(0, 0, 0, 0.25) 3px 4px); }
+.swatch-riso {
+  background-color: #eee7d8;
+  background-image: linear-gradient(135deg, transparent 40%, #1754a6 41% 62%, transparent 63%), linear-gradient(#ff563f 46%, #f0e8d8 47%);
+}
+.swatch-riso::after { background: radial-gradient(circle, transparent 0 45%, rgba(27, 83, 165, 0.5) 48% 53%, transparent 55%); background-size: 6px 6px; }
+.swatch-comic { filter: contrast(1.5) saturate(1.55); }
+.swatch-comic::after {
+  background:
+    linear-gradient(135deg, transparent 38%, rgba(14, 14, 20, 0.92) 39% 43%, transparent 44%),
+    repeating-radial-gradient(circle, transparent 0 3px, rgba(255, 226, 74, 0.28) 4px 5px);
+}
+.swatch-holo {
+  filter: brightness(1.14) contrast(0.72) saturate(0.82);
+  background-image:
+    linear-gradient(135deg, transparent 42%, #f4efff 43% 65%, transparent 66%),
+    linear-gradient(135deg, #baf5ff, #e2c7ff 43%, #ffc8e8 68%, #c7fff0);
+}
+.swatch-holo::after {
+  background:
+    radial-gradient(circle at 26% 24%, rgba(255, 255, 255, 0.9) 0 6%, transparent 8%),
+    linear-gradient(112deg, transparent 18%, rgba(255,255,255,.68) 36%, transparent 51%);
+}
+
+.sticker-section {
+  overflow: hidden;
+}
+
+.sticker-title-row {
+  min-height: 64px;
+}
+
+.sticker-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.sticker-actions button,
+.sticker-delete {
+  min-height: 36px;
+  padding: 4px 8px;
+  border: 2px solid var(--border-light);
+  color: var(--text);
+  background: var(--ink-raised);
+  font-size: 0.75rem;
+  font-weight: 900;
+  cursor: pointer;
+  transition: color var(--duration), background-color var(--duration), border-color var(--duration);
+}
+
+.sticker-actions button:hover:not(:disabled),
+.sticker-delete:hover:not(:disabled) {
+  border-color: var(--cyan);
+  color: var(--ink);
+  background: var(--cyan);
+}
+
+.sticker-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 2px;
+  padding: 2px;
+  border-top: 2px solid var(--border-light);
+  border-bottom: 2px solid var(--border-light);
+  background: var(--border-light);
+}
+
+.sticker-tabs button {
+  min-height: 40px;
+  border: 0;
+  color: var(--muted);
+  background: var(--ink-soft);
+  font-size: 0.875rem;
+  font-weight: 900;
+  cursor: pointer;
+  transition: color var(--duration), background-color var(--duration);
+}
+
+.sticker-tabs button:hover,
+.sticker-tabs button.is-selected {
+  color: var(--ink);
+  background: var(--lime);
+}
+
+.sticker-tray {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--space-2);
+  padding: var(--space-3);
+}
+
+.sticker-choice {
+  position: relative;
+  display: grid;
+  aspect-ratio: 1;
+  min-width: 0;
+  padding: 4px;
+  place-items: center;
+  overflow: hidden;
+  border: 2px solid var(--border-light);
+  color: var(--text);
+  background-color: #e9e4dc;
+  background-image:
+    linear-gradient(45deg, rgba(23, 24, 39, 0.08) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(23, 24, 39, 0.08) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(23, 24, 39, 0.08) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(23, 24, 39, 0.08) 75%);
+  background-position: 0 0, 0 6px, 6px -6px, -6px 0;
+  background-size: 12px 12px;
+  cursor: pointer;
+  transition: border-color var(--duration), background-color var(--duration), transform var(--duration);
+}
+
+.sticker-choice:hover:not(:disabled) {
+  z-index: 1;
+  border-color: var(--pink);
+  background-color: #fff8f2;
+  transform: translateY(-2px);
+}
+
+.sticker-choice img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: auto;
+  pointer-events: none;
+}
+
+.sticker-choice[data-group="pixel"] img {
+  image-rendering: pixelated;
+}
+
+.sticker-tools {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-top: 2px solid var(--border-light);
+  color: var(--text);
+  background: var(--ink-soft);
+}
+
+.mini-range {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.75rem;
+  font-weight: 900;
+}
+
+.mini-range > span {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.mini-range output {
+  color: var(--cyan);
+}
+
+.mini-range input[type="range"] {
+  height: 24px;
+  margin: 0;
+}
+
+.sticker-delete {
+  width: 100%;
+  border-color: var(--red);
+  color: var(--red);
+}
 
 .filter-copy {
   display: flex;
@@ -829,6 +1040,10 @@ input[type="range"]::-moz-range-thumb {
   .filter-card:last-child {
     grid-column: 1 / -1;
   }
+
+  .sticker-tray {
+    grid-template-columns: repeat(8, minmax(48px, 1fr));
+  }
 }
 
 @media (max-width: 680px) {
@@ -888,6 +1103,10 @@ input[type="range"]::-moz-range-thumb {
 
   .filter-card:last-child {
     grid-column: auto;
+  }
+
+  .sticker-tray {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 
 }

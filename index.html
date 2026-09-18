@@ -122,6 +122,79 @@
                   <span class="filter-copy"><strong>블루 CCD</strong><small>cool / bloom / digicam</small></span>
                   <span class="filter-index">05</span>
                 </button>
+                <button class="filter-card" type="button" role="radio" aria-checked="false" data-filter="liquify">
+                  <span class="filter-swatch swatch-liquify" aria-hidden="true"></span>
+                  <span class="filter-copy"><strong>네온 용해</strong><small>liquid / warp / neon</small></span>
+                  <span class="filter-index">06</span>
+                </button>
+                <button class="filter-card" type="button" role="radio" aria-checked="false" data-filter="signal">
+                  <span class="filter-swatch swatch-signal" aria-hidden="true"></span>
+                  <span class="filter-copy"><strong>신호 붕괴</strong><small>rgb / tear / dropout</small></span>
+                  <span class="filter-index">07</span>
+                </button>
+                <button class="filter-card" type="button" role="radio" aria-checked="false" data-filter="frameecho">
+                  <span class="filter-swatch swatch-frameecho" aria-hidden="true"></span>
+                  <span class="filter-copy"><strong>프레임 잔상</strong><small>echo / codec / smear</small></span>
+                  <span class="filter-index">08</span>
+                </button>
+                <button class="filter-card" type="button" role="radio" aria-checked="false" data-filter="prism">
+                  <span class="filter-swatch swatch-prism" aria-hidden="true"></span>
+                  <span class="filter-copy"><strong>프리즘 잔상</strong><small>prism / echo / glow</small></span>
+                  <span class="filter-index">09</span>
+                </button>
+                <button class="filter-card" type="button" role="radio" aria-checked="false" data-filter="thermal">
+                  <span class="filter-swatch swatch-thermal" aria-hidden="true"></span>
+                  <span class="filter-copy"><strong>열화상 블룸</strong><small>thermal / false color</small></span>
+                  <span class="filter-index">10</span>
+                </button>
+                <button class="filter-card" type="button" role="radio" aria-checked="false" data-filter="xerox">
+                  <span class="filter-swatch swatch-xerox" aria-hidden="true"></span>
+                  <span class="filter-copy"><strong>복사기 레이브</strong><small>xerox / toner / acid</small></span>
+                  <span class="filter-index">11</span>
+                </button>
+                <button class="filter-card" type="button" role="radio" aria-checked="false" data-filter="riso">
+                  <span class="filter-swatch swatch-riso" aria-hidden="true"></span>
+                  <span class="filter-copy"><strong>리소 어긋남</strong><small>riso / halftone / ink</small></span>
+                  <span class="filter-index">12</span>
+                </button>
+                <button class="filter-card" type="button" role="radio" aria-checked="false" data-filter="comic">
+                  <span class="filter-swatch swatch-comic" aria-hidden="true"></span>
+                  <span class="filter-copy"><strong>셀 만화</strong><small>toon / ink / cel shade</small></span>
+                  <span class="filter-index">13</span>
+                </button>
+                <button class="filter-card" type="button" role="radio" aria-checked="false" data-filter="holo">
+                  <span class="filter-swatch swatch-holo" aria-hidden="true"></span>
+                  <span class="filter-copy"><strong>홀로 드림</strong><small>pearl / haze / dream</small></span>
+                  <span class="filter-index">14</span>
+                </button>
+              </div>
+            </section>
+
+            <section class="control-section sticker-section" aria-labelledby="sticker-title">
+              <div class="section-title-row sticker-title-row">
+                <h2 id="sticker-title">스티커</h2>
+                <div class="sticker-actions">
+                  <button id="random-stickers" type="button" disabled>랜덤</button>
+                  <button id="clear-stickers" type="button" disabled>지우기</button>
+                </div>
+              </div>
+
+              <div class="sticker-tabs" role="tablist" aria-label="스티커 팩">
+                <button class="is-selected" type="button" role="tab" aria-selected="true" data-sticker-group="holo">홀로</button>
+                <button type="button" role="tab" aria-selected="false" data-sticker-group="pixel">픽셀</button>
+              </div>
+              <div id="sticker-tray" class="sticker-tray" aria-label="스티커 목록"></div>
+
+              <div id="sticker-tools" class="sticker-tools" hidden>
+                <label class="mini-range" for="sticker-size">
+                  <span>크기 <output id="sticker-size-value">100%</output></span>
+                  <input id="sticker-size" type="range" min="45" max="190" value="100" />
+                </label>
+                <label class="mini-range" for="sticker-rotation">
+                  <span>회전 <output id="sticker-rotation-value">0°</output></span>
+                  <input id="sticker-rotation" type="range" min="-180" max="180" value="0" />
+                </label>
+                <button id="delete-sticker" class="sticker-delete" type="button">선택 삭제</button>
               </div>
             </section>
 
@@ -173,6 +246,7 @@
     </div>
 
     <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+    <script src="stickers.js"></script>
     <script src="app.js"></script>
   </body>
 </html>
