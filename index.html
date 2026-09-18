@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="사진을 브라우저 안에서 Y2K, 구형 아이폰, 아날로그 TV 감성으로 바꾸는 무료 이미지 필터 도구"
+    />
+    <meta name="theme-color" content="#171827" />
+    <title>FILTER_2000.exe — 나만의 추억 필터</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#editor">편집기로 바로가기</a>
+
+    <div class="page-shell">
+      <header class="site-header" aria-label="사이트 헤더">
+        <a class="brand" href="#" aria-label="FILTER 2000 홈">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="img">
+              <path d="M4 5h16v14H4zM7 8h4v4H7zm7 0h3m-3 3h3M7 16h10" />
+            </svg>
+          </span>
+          <span>FILTER_2000.exe</span>
+        </a>
+        <div class="privacy-badge">
+          <span class="status-light" aria-hidden="true"></span>
+          사진은 기기 밖으로 나가지 않아요
+        </div>
+      </header>
+
+      <main id="editor" class="editor-window" tabindex="-1">
+        <div class="title-bar">
+          <div class="title-path">
+            <span class="tiny-disk" aria-hidden="true"></span>
+            A:\MEMORY\FILTERS
+          </div>
+          <div class="window-controls" aria-hidden="true">
+            <span>_</span><span>□</span><span>×</span>
+          </div>
+        </div>
+
+        <div class="menu-bar" aria-hidden="true">
+          <span><u>F</u>ILE</span>
+          <span><u>E</u>FFECT</span>
+          <span><u>V</u>IEW</span>
+          <span><u>H</u>ELP</span>
+        </div>
+
+        <div class="workspace">
+          <section class="preview-panel" aria-labelledby="preview-heading">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">01 / PREVIEW</p>
+                <h1 id="preview-heading">추억을 조금 망가뜨려 볼까요?</h1>
+              </div>
+              <button id="reset-button" class="icon-button" type="button" disabled aria-label="처음부터 다시 하기">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M4 4v6h6M5.5 9A7 7 0 1 1 5 16" />
+                </svg>
+              </button>
+            </div>
+
+            <div id="drop-zone" class="canvas-frame" role="button" tabindex="0" aria-label="사진을 선택하거나 여기에 놓기">
+              <canvas id="preview-canvas" aria-label="필터 적용 이미지 미리보기"></canvas>
+              <div id="empty-state" class="empty-state">
+                <div class="empty-graphic" aria-hidden="true">
+                  <div class="empty-sun"></div>
+                  <div class="empty-mountain mountain-one"></div>
+                  <div class="empty-mountain mountain-two"></div>
+                  <div class="empty-spark spark-one">✦</div>
+                  <div class="empty-spark spark-two">✦</div>
+                </div>
+                <p class="empty-kicker">NO IMAGE DETECTED</p>
+                <h2>사진 한 장을 불러와 주세요</h2>
+                <p>클릭하거나 드래그 앤 드롭 · JPG, PNG, WEBP</p>
+                <button id="upload-button" class="button button-primary" type="button">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M12 16V4m0 0L7 9m5-5 5 5M5 14v5h14v-5" />
+                  </svg>
+                  사진 불러오기
+                </button>
+              </div>
+              <div class="screen-overlay" aria-hidden="true"></div>
+              <div id="processing-indicator" class="processing-indicator" hidden>
+                <span></span> PROCESSING...
+              </div>
+            </div>
+
+            <input id="file-input" type="file" accept="image/jpeg,image/png,image/webp" hidden />
+
+            <div class="preview-toolbar">
+              <div id="file-meta" class="file-meta" aria-live="polite">이미지 대기 중</div>
+              <button id="compare-button" class="button button-dark" type="button" disabled aria-pressed="false">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 3v18M5 5h14v14H5z" />
+                </svg>
+                누르고 원본 보기
+              </button>
+            </div>
+          </section>
+
+          <aside class="control-panel" aria-label="필터 설정">
+            <section class="control-section" aria-labelledby="filter-title">
+              <div class="section-title-row">
+                <div>
+                  <p class="eyebrow">02 / EFFECT</p>
+                  <h2 id="filter-title">필터 선택</h2>
+                </div>
+                <span id="filter-count" class="count-badge">01 / 05</span>
+              </div>
+
+              <div class="filter-list" role="radiogroup" aria-label="필터 프리셋">
+                <button class="filter-card is-active" type="button" role="radio" aria-checked="true" data-filter="softcam">
+                  <span class="filter-swatch swatch-softcam" aria-hidden="true"></span>
+                  <span class="filter-copy"><strong>흐릿한 아이폰</strong><small>soft / hazy / 2011</small></span>
+                  <span class="filter-index">01</span>
+                </button>
+                <button class="filter-card" type="button" role="radio" aria-checked="false" data-filter="y2k">
+                  <span class="filter-swatch swatch-y2k" aria-hidden="true"></span>
+                  <span class="filter-copy"><strong>오줌 감성</strong><small>yellow / flash / y2k</small></span>
+                  <span class="filter-index">02</span>
+                </button>
+                <button class="filter-card" type="button" role="radio" aria-checked="false" data-filter="analog">
+                  <span class="filter-swatch swatch-analog" aria-hidden="true"></span>
+                  <span class="filter-copy"><strong>아날로그 TV</strong><small>scanline / noise / rgb</small></span>
+                  <span class="filter-index">03</span>
+                </button>
+                <button class="filter-card" type="button" role="radio" aria-checked="false" data-filter="disposable">
+                  <span class="filter-swatch swatch-disposable" aria-hidden="true"></span>
+                  <span class="filter-copy"><strong>일회용 플래시</strong><small>flash / grain / night</small></span>
+                  <span class="filter-index">04</span>
+                </button>
+                <button class="filter-card" type="button" role="radio" aria-checked="false" data-filter="ccd">
+                  <span class="filter-swatch swatch-ccd" aria-hidden="true"></span>
+                  <span class="filter-copy"><strong>블루 CCD</strong><small>cool / bloom / digicam</small></span>
+                  <span class="filter-index">05</span>
+                </button>
+              </div>
+            </section>
+
+            <section class="control-section settings-section" aria-labelledby="settings-title">
+              <p class="eyebrow">03 / TUNE</p>
+              <h2 id="settings-title">세부 조정</h2>
+
+              <label class="range-control" for="strength-range">
+                <span><strong>필터 강도</strong><output id="strength-value">72%</output></span>
+                <input id="strength-range" type="range" min="0" max="100" value="72" />
+              </label>
+
+              <label class="range-control" for="grain-range">
+                <span><strong>입자감</strong><output id="grain-value">24%</output></span>
+                <input id="grain-range" type="range" min="0" max="100" value="24" />
+              </label>
+
+              <fieldset class="ratio-control">
+                <legend>사진 비율</legend>
+                <div class="segmented-control">
+                  <button class="is-selected" type="button" data-ratio="original" aria-pressed="true">원본</button>
+                  <button type="button" data-ratio="1:1" aria-pressed="false">1:1</button>
+                  <button type="button" data-ratio="4:5" aria-pressed="false">4:5</button>
+                </div>
+              </fieldset>
+
+              <label class="toggle-row" for="date-toggle">
+                <span><strong>날짜 스탬프</strong><small>사진 아래에 오늘 날짜 새기기</small></span>
+                <span class="switch"><input id="date-toggle" type="checkbox" /><span aria-hidden="true"></span></span>
+              </label>
+            </section>
+
+            <button id="download-button" class="button button-download" type="button" disabled>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 4v11m0 0 5-5m-5 5-5-5M5 19h14" />
+              </svg>
+              PNG로 저장하기
+            </button>
+            <p class="local-note">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 10V8a6 6 0 0 1 12 0v2M5 10h14v10H5z" /></svg>
+              모든 편집은 이 브라우저 안에서만 처리됩니다.
+            </p>
+          </aside>
+        </div>
+
+        <div class="status-bar" aria-hidden="true">
+          <span>READY</span><span>RGB / 24 BIT</span><span id="status-size">0 × 0 PX</span>
+        </div>
+      </main>
+
+      <section class="info-strip" aria-label="사용 방법">
+        <article><span>01</span><strong>DROP</strong><p>사진을 불러오고</p></article>
+        <div class="info-arrow" aria-hidden="true">→</div>
+        <article><span>02</span><strong>DIRTY</strong><p>마음껏 낡게 만들고</p></article>
+        <div class="info-arrow" aria-hidden="true">→</div>
+        <article><span>03</span><strong>SAVE</strong><p>PNG로 간직하세요</p></article>
+      </section>
+
+      <footer>
+        <p>MADE FOR OLD MEMORIES &amp; NEW PHOTOS.</p>
+        <p>FILTER_2000.exe / LOCAL IMAGE LAB</p>
+      </footer>
+    </div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+    <script src="app.js"></script>
+  </body>
+</html>
