@@ -17,7 +17,15 @@ const elements = {
   strengthValue: $("#strength-value"),
   grainRange: $("#grain-range"),
   grainValue: $("#grain-value"),
+  liquifyControls: $("#liquify-controls"),
+  liquifyModeButtons: $$('[data-liquify-mode]'),
+  liquifyBrushTools: $("#liquify-brush-tools"),
+  liquifyBrushSize: $("#liquify-brush-size"),
+  liquifyBrushSizeValue: $("#liquify-brush-size-value"),
+  undoLiquify: $("#undo-liquify"),
+  clearLiquify: $("#clear-liquify"),
   ratioButtons: $$("[data-ratio]"),
+  formatButtons: $$('[data-format]'),
   dateToggle: $("#date-toggle"),
   fileMeta: $("#file-meta"),
   statusSize: $("#status-size"),
@@ -54,6 +62,11 @@ const state = {
   draggingSticker: null,
   stickerCounter: 0,
   customStickerCounter: 0,
+  liquifyMode: "global",
+  liquifyBrushSize: 0.18,
+  liquifyStrokes: [],
+  paintingLiquify: null,
+  exportFormat: "png",
 };
 
 const stickerCatalog = window.STICKER_CATALOG || [];
@@ -81,6 +94,11 @@ const filterNames = {
 
 function clamp(value, min = 0, max = 255) {
   return Math.max(min, Math.min(max, value));
+}
+
+function softenedLiquifyStrength(strength) {
+  if (strength <= 0.5) return strength;
+  return 0.5 + (strength - 0.5) * 0.36;
 }
 
 function mulberry32(seed) {
@@ -135,13 +153,15 @@ function getOutputSize(crop, maxSide) {
 
 function presetFilter(name, strength) {
   const s = strength;
+  const liquid = softenedLiquifyStrength(strength);
   const filters = {
     softcam: `brightness(${1 + 0.09 * s}) contrast(${1 - 0.18 * s}) saturate(${1 - 0.25 * s}) sepia(${0.08 * s}) blur(${0.65 * s}px)`,
     y2k: `brightness(${1 + 0.03 * s}) contrast(${1 + 0.08 * s}) saturate(${1 - 0.3 * s}) sepia(${0.46 * s}) hue-rotate(${-8 * s}deg)`,
     analog: `brightness(${1 - 0.04 * s}) contrast(${1 + 0.25 * s}) saturate(${1 - 0.42 * s})`,
     disposable: `brightness(${1 + 0.02 * s}) contrast(${1 + 0.26 * s}) saturate(${1 - 0.12 * s}) sepia(${0.1 * s})`,
     ccd: `brightness(${1 - 0.02 * s}) contrast(${1 - 0.06 * s}) saturate(${1 - 0.16 * s}) hue-rotate(${4 * s}deg)`,
-    liquify: `brightness(${1 - 0.08 * s}) contrast(${1 + 0.34 * s}) saturate(${1 + 0.72 * s})`,
+    liquify: `brightness(${1 - 0.05 * liquid}) contrast(${1 + 0.22 * liquid}) saturate(${1 + 0.42 * liquid})`,
+    liquifybrush: "none",
     signal: `brightness(${1 - 0.04 * s}) contrast(${1 + 0.2 * s}) saturate(${1 + 0.28 * s})`,
     frameecho: `brightness(${1 - 0.03 * s}) contrast(${1 + 0.12 * s}) saturate(${1 + 0.18 * s})`,
     prism: `brightness(${1 + 0.08 * s}) contrast(${1 - 0.12 * s}) saturate(${1 + 0.12 * s})`,
@@ -240,6 +260,7 @@ function addScanlines(ctx, width, height, strength) {
 }
 
 function applyNeonLiquify(ctx, width, height, strength, seed) {
+  strength = softenedLiquifyStrength(strength);
   if (strength <= 0.01) return;
   const imageData = ctx.getImageData(0, 0, width, height);
   const source = new Uint8ClampedArray(imageData.data);
@@ -275,6 +296,70 @@ function applyNeonLiquify(ctx, width, height, strength, seed) {
   }
   ctx.putImageData(imageData, 0, 0);
   addColorWash(ctx, width, height, "#17002e", 0.16 * strength, "multiply");
+}
+
+function applyNeonBrush(ctx, width, height, strength, strokes, seed) {
+  if (strength <= 0.01 || strokes.length === 0) return;
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const source = new Uint8ClampedArray(imageData.data);
+  const data = imageData.data;
+  const minSide = Math.min(width, height);
+  const basePhase = (seed % 991) / 991 * Math.PI * 2;
+  const effectStrength = 0.38 + softenedLiquifyStrength(strength) * 0.62;
+
+  strokes.forEach((stroke, strokeIndex) => {
+    stroke.points.forEach((point, pointIndex) => {
+      const centerX = point.x * width;
+      const centerY = point.y * height;
+      const radius = Math.max(8, point.radius * minSide);
+      const startX = Math.max(0, Math.floor(centerX - radius));
+      const endX = Math.min(width - 1, Math.ceil(centerX + radius));
+      const startY = Math.max(0, Math.floor(centerY - radius));
+      const endY = Math.min(height - 1, Math.ceil(centerY + radius));
+      const dragX = point.dx * width * (1.8 + effectStrength * 2.2);
+      const dragY = point.dy * height * (1.8 + effectStrength * 2.2);
+      const phase = basePhase + strokeIndex * 0.83 + pointIndex * 0.27;
+      const channelShift = Math.max(1, Math.round(radius * 0.08 * effectStrength));
+
+      for (let y = startY; y <= endY; y += 1) {
+        const relativeY = y - centerY;
+        for (let x = startX; x <= endX; x += 1) {
+          const relativeX = x - centerX;
+          const distance = Math.hypot(relativeX, relativeY);
+          if (distance > radius) continue;
+          const normalized = distance / radius;
+          const falloff = Math.pow(1 - normalized, 1.85);
+          const angle = Math.atan2(relativeY, relativeX);
+          const ripple = Math.sin(normalized * Math.PI * 4.2 - phase) * radius * 0.13 * effectStrength * falloff;
+          const swirl = radius * 0.14 * effectStrength * falloff;
+          const sourceX = Math.round(clamp(
+            x - dragX * falloff + Math.cos(angle) * ripple - Math.sin(angle) * swirl,
+            0,
+            width - 1,
+          ));
+          const sourceY = Math.round(clamp(
+            y - dragY * falloff + Math.sin(angle) * ripple + Math.cos(angle) * swirl,
+            0,
+            height - 1,
+          ));
+          const redX = Math.round(clamp(sourceX + channelShift * falloff, 0, width - 1));
+          const blueX = Math.round(clamp(sourceX - channelShift * falloff, 0, width - 1));
+          const target = pixelIndex(x, y, width);
+          const centerSource = pixelIndex(sourceX, sourceY, width);
+          const redSource = pixelIndex(redX, sourceY, width);
+          const blueSource = pixelIndex(blueX, sourceY, width);
+          const mix = falloff * (0.48 + effectStrength * 0.42);
+          const red = clamp(source[redSource] * 1.18 + source[blueSource + 2] * 0.07);
+          const green = clamp(source[centerSource + 1] * 0.72 + Math.min(red, source[blueSource + 2]) * 0.08);
+          const blue = clamp(source[blueSource + 2] * 1.24 + source[redSource] * 0.08);
+          data[target] = mixChannel(data[target], red, mix);
+          data[target + 1] = mixChannel(data[target + 1], green, mix);
+          data[target + 2] = mixChannel(data[target + 2], blue, mix);
+        }
+      }
+    });
+  });
+  ctx.putImageData(imageData, 0, 0);
 }
 
 function applySignalCrash(ctx, width, height, strength, seed) {
@@ -986,6 +1071,102 @@ function endStickerDrag(event) {
   elements.canvas.classList.remove("is-dragging-sticker");
 }
 
+function liquifyPointCount() {
+  return state.liquifyStrokes.reduce((total, stroke) => total + stroke.points.length, 0);
+}
+
+function updateLiquifyUI() {
+  const isLiquify = state.filter === "liquify";
+  const isBrush = isLiquify && state.liquifyMode === "brush";
+  elements.liquifyControls.hidden = !isLiquify;
+  elements.liquifyBrushTools.hidden = !isBrush;
+  elements.undoLiquify.disabled = state.liquifyStrokes.length === 0;
+  elements.clearLiquify.disabled = state.liquifyStrokes.length === 0;
+  elements.canvas.classList.toggle("is-liquify-brush", isBrush && Boolean(state.image));
+}
+
+function addLiquifyPoint(stroke, point, deltaX, deltaY) {
+  if (liquifyPointCount() >= 60) return false;
+  stroke.points.push({
+    x: point.x / elements.canvas.width,
+    y: point.y / elements.canvas.height,
+    dx: deltaX / elements.canvas.width,
+    dy: deltaY / elements.canvas.height,
+    radius: state.liquifyBrushSize,
+  });
+  return true;
+}
+
+function beginLiquifyPaint(event) {
+  if (
+    !state.image
+    || state.filter !== "liquify"
+    || state.liquifyMode !== "brush"
+    || state.comparing
+    || event.button !== 0
+  ) return false;
+  const point = canvasPointFromEvent(event);
+  if (!point) return true;
+  const stroke = { points: [] };
+  if (!addLiquifyPoint(stroke, point, 0, 0)) {
+    event.preventDefault();
+    return true;
+  }
+  state.liquifyStrokes.push(stroke);
+  state.paintingLiquify = {
+    pointerId: event.pointerId,
+    stroke,
+    lastX: point.x,
+    lastY: point.y,
+  };
+  elements.canvas.setPointerCapture(event.pointerId);
+  elements.canvas.classList.add("is-painting-liquify");
+  event.preventDefault();
+  updateLiquifyUI();
+  scheduleRender();
+  return true;
+}
+
+function moveLiquifyPaint(event) {
+  const painting = state.paintingLiquify;
+  if (!painting || painting.pointerId !== event.pointerId) return false;
+  const point = canvasPointFromEvent(event);
+  if (!point) return true;
+  const deltaX = point.x - painting.lastX;
+  const deltaY = point.y - painting.lastY;
+  const minDistance = Math.min(elements.canvas.width, elements.canvas.height)
+    * Math.max(0.012, state.liquifyBrushSize * 0.28);
+  if (Math.hypot(deltaX, deltaY) < minDistance) return true;
+  if (addLiquifyPoint(painting.stroke, point, deltaX, deltaY)) {
+    painting.lastX = point.x;
+    painting.lastY = point.y;
+    scheduleRender();
+  }
+  event.preventDefault();
+  return true;
+}
+
+function endLiquifyPaint(event) {
+  if (!state.paintingLiquify || state.paintingLiquify.pointerId !== event.pointerId) return false;
+  if (elements.canvas.hasPointerCapture(event.pointerId)) elements.canvas.releasePointerCapture(event.pointerId);
+  state.paintingLiquify = null;
+  elements.canvas.classList.remove("is-painting-liquify");
+  updateLiquifyUI();
+  return true;
+}
+
+function handleCanvasPointerDown(event) {
+  if (!beginLiquifyPaint(event)) beginStickerDrag(event);
+}
+
+function handleCanvasPointerMove(event) {
+  if (!moveLiquifyPaint(event)) moveSticker(event);
+}
+
+function handleCanvasPointerEnd(event) {
+  if (!endLiquifyPaint(event)) endStickerDrag(event);
+}
+
 function drawProcessed(targetCanvas, maxSide = 1500, originalOnly = false) {
   if (!state.image) return null;
 
@@ -997,7 +1178,10 @@ function drawProcessed(targetCanvas, maxSide = 1500, originalOnly = false) {
   ctx.clearRect(0, 0, output.width, output.height);
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
-  ctx.filter = originalOnly ? "none" : presetFilter(state.filter, state.strength);
+  const presetName = state.filter === "liquify" && state.liquifyMode === "brush"
+    ? "liquifybrush"
+    : state.filter;
+  ctx.filter = originalOnly ? "none" : presetFilter(presetName, state.strength);
   ctx.drawImage(
     state.image,
     crop.sx,
@@ -1042,8 +1226,19 @@ function drawProcessed(targetCanvas, maxSide = 1500, originalOnly = false) {
     }
 
     if (state.filter === "liquify") {
-      applyNeonLiquify(ctx, output.width, output.height, state.strength, state.seed);
-      addVignette(ctx, output.width, output.height, 0.34 * state.strength);
+      if (state.liquifyMode === "brush") {
+        applyNeonBrush(
+          ctx,
+          output.width,
+          output.height,
+          state.strength,
+          state.liquifyStrokes,
+          state.seed,
+        );
+      } else {
+        applyNeonLiquify(ctx, output.width, output.height, state.strength, state.seed);
+        addVignette(ctx, output.width, output.height, 0.34 * softenedLiquifyStrength(state.strength));
+      }
     }
 
     if (state.filter === "signal") {
@@ -1072,7 +1267,9 @@ function drawProcessed(targetCanvas, maxSide = 1500, originalOnly = false) {
 
     addPixelEffects(ctx, output.width, output.height, state.filter, state.strength, state.grain, state.seed);
     if (state.filter === "analog") addScanlines(ctx, output.width, output.height, state.strength);
-    drawStickers(ctx, output.width, output.height, targetCanvas === elements.canvas);
+    const showStickerSelection = targetCanvas === elements.canvas
+      && !(state.filter === "liquify" && state.liquifyMode === "brush");
+    drawStickers(ctx, output.width, output.height, showStickerSelection);
     if (state.showDate) addDateStamp(ctx, output.width, output.height);
   }
 
@@ -1124,7 +1321,10 @@ async function loadFile(file) {
     state.stickers = [];
     state.selectedStickerId = null;
     state.draggingSticker = null;
+    state.liquifyStrokes = [];
+    state.paintingLiquify = null;
     updateLoadedUI(file);
+    updateLiquifyUI();
     scheduleRender();
     showToast("사진을 불러왔어요.");
   };
@@ -1142,6 +1342,8 @@ function resetEditor() {
   state.stickers = [];
   state.selectedStickerId = null;
   state.draggingSticker = null;
+  state.liquifyStrokes = [];
+  state.paintingLiquify = null;
   elements.canvas.width = 0;
   elements.canvas.height = 0;
   elements.emptyState.hidden = false;
@@ -1153,6 +1355,7 @@ function resetEditor() {
   elements.compareButton.disabled = true;
   elements.downloadButton.disabled = true;
   updateStickerUI();
+  updateLiquifyUI();
   showToast("편집기를 비웠어요.");
 }
 
@@ -1164,32 +1367,46 @@ function setComparing(active) {
   scheduleRender();
 }
 
+function updateDownloadButtonLabel(rendering = false) {
+  if (rendering) {
+    elements.downloadButton.textContent = "렌더링 중...";
+    return;
+  }
+  const label = state.exportFormat.toUpperCase();
+  elements.downloadButton.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0 5-5m-5 5-5-5M5 19h14" /></svg>${label}로 저장하기`;
+}
+
 function downloadImage() {
   if (!state.image) return;
   elements.downloadButton.disabled = true;
-  elements.downloadButton.textContent = "렌더링 중...";
+  updateDownloadButtonLabel(true);
   requestAnimationFrame(() => {
     const exportCanvas = document.createElement("canvas");
     drawProcessed(exportCanvas, 3200, false);
+    const mimeType = state.exportFormat === "webp" ? "image/webp" : "image/png";
+    const quality = state.exportFormat === "webp" ? 0.92 : undefined;
     exportCanvas.toBlob(
       (blob) => {
         if (!blob) {
           showToast("저장에 실패했어요. 다시 시도해 주세요.");
           elements.downloadButton.disabled = false;
-          elements.downloadButton.textContent = "PNG로 저장하기";
+          updateDownloadButtonLabel();
           return;
         }
         const link = document.createElement("a");
         const safeBase = state.fileName.replace(/\.[^/.]+$/, "").replace(/[^a-zA-Z0-9가-힣_-]+/g, "-");
-        link.download = `${safeBase || "memory"}-${state.filter}.png`;
+        const actualFormat = blob.type === "image/webp" ? "webp" : "png";
+        link.download = `${safeBase || "memory"}-${state.filter}.${actualFormat}`;
         link.href = URL.createObjectURL(blob);
         link.click();
         setTimeout(() => URL.revokeObjectURL(link.href), 1000);
-        elements.downloadButton.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0 5-5m-5 5-5-5M5 19h14" /></svg>PNG로 저장하기';
+        updateDownloadButtonLabel();
         elements.downloadButton.disabled = false;
-        showToast(`${filterNames[state.filter]} 필터로 저장했어요.`);
+        const label = actualFormat.toUpperCase();
+        showToast(`${filterNames[state.filter]} · ${label}로 저장했어요.`);
       },
-      "image/png",
+      mimeType,
+      quality,
     );
   });
 }
@@ -1241,6 +1458,7 @@ elements.filterCards.forEach((card) => {
       item.classList.toggle("is-active", selected);
       item.setAttribute("aria-checked", String(selected));
     });
+    updateLiquifyUI();
     scheduleRender();
   });
 });
@@ -1259,6 +1477,39 @@ elements.grainRange.addEventListener("input", () => {
   scheduleRender();
 });
 
+elements.liquifyModeButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    state.liquifyMode = button.dataset.liquifyMode;
+    state.paintingLiquify = null;
+    elements.canvas.classList.remove("is-painting-liquify");
+    elements.liquifyModeButtons.forEach((item) => {
+      const selected = item === button;
+      item.classList.toggle("is-selected", selected);
+      item.setAttribute("aria-pressed", String(selected));
+    });
+    updateLiquifyUI();
+    scheduleRender();
+  });
+});
+
+elements.liquifyBrushSize.addEventListener("input", () => {
+  state.liquifyBrushSize = Number(elements.liquifyBrushSize.value) / 100;
+  elements.liquifyBrushSizeValue.textContent = `${elements.liquifyBrushSize.value}%`;
+  setNormalizedRangeFill(elements.liquifyBrushSize);
+});
+
+elements.undoLiquify.addEventListener("click", () => {
+  state.liquifyStrokes.pop();
+  updateLiquifyUI();
+  scheduleRender();
+});
+
+elements.clearLiquify.addEventListener("click", () => {
+  state.liquifyStrokes = [];
+  updateLiquifyUI();
+  scheduleRender();
+});
+
 elements.ratioButtons.forEach((button) => {
   button.addEventListener("click", () => {
     state.ratio = button.dataset.ratio;
@@ -1268,6 +1519,18 @@ elements.ratioButtons.forEach((button) => {
       item.setAttribute("aria-pressed", String(selected));
     });
     scheduleRender();
+  });
+});
+
+elements.formatButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    state.exportFormat = button.dataset.format;
+    elements.formatButtons.forEach((item) => {
+      const selected = item === button;
+      item.classList.toggle("is-selected", selected);
+      item.setAttribute("aria-pressed", String(selected));
+    });
+    updateDownloadButtonLabel();
   });
 });
 
@@ -1308,10 +1571,10 @@ elements.stickerRotation.addEventListener("input", () => {
   scheduleRender();
 });
 
-elements.canvas.addEventListener("pointerdown", beginStickerDrag);
-elements.canvas.addEventListener("pointermove", moveSticker);
-elements.canvas.addEventListener("pointerup", endStickerDrag);
-elements.canvas.addEventListener("pointercancel", endStickerDrag);
+elements.canvas.addEventListener("pointerdown", handleCanvasPointerDown);
+elements.canvas.addEventListener("pointermove", handleCanvasPointerMove);
+elements.canvas.addEventListener("pointerup", handleCanvasPointerEnd);
+elements.canvas.addEventListener("pointercancel", handleCanvasPointerEnd);
 
 window.addEventListener("keydown", (event) => {
   if (!["Delete", "Backspace"].includes(event.key) || !state.selectedStickerId) return;
@@ -1341,4 +1604,7 @@ elements.downloadButton.addEventListener("click", downloadImage);
 
 setRangeFill(elements.strengthRange);
 setRangeFill(elements.grainRange);
+setNormalizedRangeFill(elements.liquifyBrushSize);
+updateLiquifyUI();
+updateDownloadButtonLabel();
 initializeStickerAssets();

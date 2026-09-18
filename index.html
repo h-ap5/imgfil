@@ -215,6 +215,27 @@
                 <input id="grain-range" type="range" min="0" max="100" value="24" />
               </label>
 
+              <div id="liquify-controls" class="liquify-controls" hidden>
+                <fieldset class="ratio-control liquify-mode-control">
+                  <legend>용해 범위</legend>
+                  <div class="segmented-control">
+                    <button class="is-selected" type="button" data-liquify-mode="global" aria-pressed="true">전체</button>
+                    <button type="button" data-liquify-mode="brush" aria-pressed="false">브러시</button>
+                  </div>
+                </fieldset>
+                <div id="liquify-brush-tools" class="liquify-brush-tools" hidden>
+                  <label class="range-control" for="liquify-brush-size">
+                    <span><strong>브러시 크기</strong><output id="liquify-brush-size-value">18%</output></span>
+                    <input id="liquify-brush-size" type="range" min="6" max="34" value="18" />
+                  </label>
+                  <div class="brush-actions">
+                    <span>사진을 누르거나 문지르기</span>
+                    <button id="undo-liquify" type="button" disabled>한 획 취소</button>
+                    <button id="clear-liquify" type="button" disabled>전부 지우기</button>
+                  </div>
+                </div>
+              </div>
+
               <fieldset class="ratio-control">
                 <legend>사진 비율</legend>
                 <div class="segmented-control">
@@ -229,6 +250,14 @@
                 <span class="switch"><input id="date-toggle" type="checkbox" /><span aria-hidden="true"></span></span>
               </label>
             </section>
+
+            <fieldset class="export-format-control">
+              <legend>저장 형식</legend>
+              <div class="segmented-control">
+                <button class="is-selected" type="button" data-format="png" aria-pressed="true">PNG</button>
+                <button type="button" data-format="webp" aria-pressed="false">WEBP</button>
+              </div>
+            </fieldset>
 
             <button id="download-button" class="button button-download" type="button" disabled>
               <svg viewBox="0 0 24 24" aria-hidden="true">

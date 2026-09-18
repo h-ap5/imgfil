@@ -341,6 +341,14 @@ h2 {
   cursor: grabbing;
 }
 
+.canvas-frame.has-image #preview-canvas.is-liquify-brush {
+  cursor: crosshair;
+}
+
+.canvas-frame.has-image #preview-canvas.is-painting-liquify {
+  cursor: none;
+}
+
 .empty-state {
   position: absolute;
   z-index: 2;
@@ -810,6 +818,55 @@ h2 {
   margin-bottom: 24px;
 }
 
+.liquify-controls {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 2px solid var(--border-light);
+}
+
+.liquify-mode-control {
+  margin-top: 0;
+}
+
+.liquify-mode-control .segmented-control,
+.export-format-control .segmented-control {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.liquify-brush-tools > .range-control {
+  margin-top: 16px;
+}
+
+.brush-actions {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.brush-actions span {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.brush-actions button {
+  min-height: 36px;
+  padding: 4px 8px;
+  border: 2px solid var(--border-light);
+  color: var(--text);
+  background: var(--ink-raised);
+  font-size: 0.75rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.brush-actions button:hover:not(:disabled) {
+  color: var(--ink);
+  background: var(--cyan);
+}
+
 .range-control {
   display: block;
   margin-top: 24px;
@@ -976,6 +1033,20 @@ input[type="range"]::-moz-range-thumb {
   font-size: 1rem;
 }
 
+.export-format-control {
+  margin: 0;
+  padding: 16px;
+  border: 2px solid var(--border-dark);
+  color: var(--text);
+  background: var(--ink);
+}
+
+.export-format-control legend {
+  padding: 0 4px;
+  font-size: 0.875rem;
+  font-weight: 900;
+}
+
 .local-note {
   display: flex;
   align-items: center;
@@ -1117,6 +1188,14 @@ input[type="range"]::-moz-range-thumb {
 
   .sticker-tray {
     grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .brush-actions {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .brush-actions span {
+    grid-column: 1 / -1;
   }
 
 }
