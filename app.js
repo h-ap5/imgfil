@@ -64,6 +64,7 @@ const elements = {
   filmSlotList: $("#film-slot-list"),
   xpOverlayButtons: $$('[data-xp-overlay]'),
   digicamFrameButtons: $$('[data-digicam-frame]'),
+  paintFrameButtons: $$('[data-paint-frame]'),
   vnModeButtons: $$('[data-vn-mode]'),
   vnStyleButtons: $$('[data-vn-style]'),
   vnFontButtons: $$('[data-vn-font]'),
@@ -115,7 +116,9 @@ const state = {
   filmFrameImages: [],
   pendingFilmSlot: null,
   xpOverlay: false,
-  digicamFrame: false,
+  digicamFrame: "off",
+  paintFrame: false,
+  previewContentSize: null,
   vnMode: "off",
   vnStyle: "classic",
   vnFont: "pixel",
@@ -140,6 +143,37 @@ heartTunnelTexture.onload = () => {
   if (state.image && state.filter === "hearttunnel") scheduleRender();
 };
 heartTunnelTexture.src = "assets/heart-tunnel.png";
+
+const rasterFrameDefinitions = {
+  horizontal: {
+    src: "assets/digicam-horizontal.png",
+    crop: { x: 5 / 236, y: 132 / 420, width: 226 / 236, height: 141 / 420 },
+    screen: { x: 18 / 226, y: 37 / 141, width: 106 / 226, height: 80 / 141 },
+    radius: 0.004,
+  },
+  portrait: {
+    src: "assets/digicam-portrait.png",
+    crop: { x: 0, y: 0, width: 1, height: 1 },
+    screen: { x: 0.076, y: 0.204, width: 0.704, height: 0.417 },
+    radius: 0.03,
+  },
+  paint: {
+    src: "assets/paint-frame.png",
+    crop: { x: 0, y: 0, width: 1, height: 1 },
+    screen: { x: 37 / 236, y: 28 / 222, width: 188 / 236, height: 140 / 222 },
+    radius: 0,
+  },
+};
+
+Object.values(rasterFrameDefinitions).forEach((definition) => {
+  const image = new Image();
+  image.decoding = "async";
+  image.onload = () => {
+    definition.image = image;
+    if (state.image) scheduleRender();
+  };
+  image.src = definition.src;
+});
 
 const filterNames = {
   softcam: "흐릿한 아이폰",
@@ -1476,6 +1510,29 @@ function drawStickers(ctx, width, height, showSelection) {
   ctx.imageSmoothingEnabled = previousSmoothing;
 }
 
+function getEditorContentSize() {
+  return state.previewContentSize || {
+    width: elements.canvas.width,
+    height: elements.canvas.height,
+  };
+}
+
+function getActiveRasterFrameDefinition() {
+  if (state.paintFrame) return rasterFrameDefinitions.paint;
+  if (state.digicamFrame !== "off") return rasterFrameDefinitions[state.digicamFrame] || null;
+  return null;
+}
+
+function getRasterFrameScreenRect(width, height, definition) {
+  if (!definition) return null;
+  return {
+    x: definition.screen.x * width,
+    y: definition.screen.y * height,
+    width: definition.screen.width * width,
+    height: definition.screen.height * height,
+  };
+}
+
 function canvasPointFromEvent(event) {
   if (!elements.canvas.width || !elements.canvas.height) return null;
   const rect = elements.canvas.getBoundingClientRect();
@@ -1488,10 +1545,20 @@ function canvasPointFromEvent(event) {
   const cssY = event.clientY - rect.top - offsetY;
   if (cssX < 0 || cssY < 0 || cssX > shownWidth || cssY > shownHeight) return null;
   const point = { x: cssX / scale, y: cssY / scale };
+  const contentSize = getEditorContentSize();
   let contentRect = null;
-  if (state.digicamFrame) contentRect = getDigicamLayout(elements.canvas.width, elements.canvas.height).screen;
+  const rasterFrame = getActiveRasterFrameDefinition();
+  if (rasterFrame?.image?.complete && rasterFrame.image.naturalWidth) {
+    contentRect = getRasterFrameScreenRect(elements.canvas.width, elements.canvas.height, rasterFrame);
+  }
   else if (state.xpOverlay) contentRect = getXpImageRect(elements.canvas.width, elements.canvas.height);
-  if (!contentRect) return point;
+  if (!contentRect) {
+    if (contentSize.width === elements.canvas.width && contentSize.height === elements.canvas.height) return point;
+    return {
+      x: point.x / elements.canvas.width * contentSize.width,
+      y: point.y / elements.canvas.height * contentSize.height,
+    };
+  }
   if (
     point.x < contentRect.x
     || point.y < contentRect.y
@@ -1499,17 +1566,18 @@ function canvasPointFromEvent(event) {
     || point.y > contentRect.y + contentRect.height
   ) return null;
   return {
-    x: (point.x - contentRect.x) / contentRect.width * elements.canvas.width,
-    y: (point.y - contentRect.y) / contentRect.height * elements.canvas.height,
+    x: (point.x - contentRect.x) / contentRect.width * contentSize.width,
+    y: (point.y - contentRect.y) / contentRect.height * contentSize.height,
   };
 }
 
 function findStickerAt(point) {
+  const contentSize = getEditorContentSize();
   for (let index = state.stickers.length - 1; index >= 0; index -= 1) {
     const sticker = state.stickers[index];
-    const dimensions = stickerPixelDimensions(sticker, elements.canvas.width, elements.canvas.height);
-    const dx = point.x - sticker.x * elements.canvas.width;
-    const dy = point.y - sticker.y * elements.canvas.height;
+    const dimensions = stickerPixelDimensions(sticker, contentSize.width, contentSize.height);
+    const dx = point.x - sticker.x * contentSize.width;
+    const dy = point.y - sticker.y * contentSize.height;
     const cos = Math.cos(-sticker.rotation);
     const sin = Math.sin(-sticker.rotation);
     const localX = dx * cos - dy * sin;
@@ -1522,28 +1590,30 @@ function findStickerAt(point) {
 function isDeleteHandleHit(point) {
   const sticker = selectedSticker();
   if (!sticker) return false;
-  const dimensions = stickerPixelDimensions(sticker, elements.canvas.width, elements.canvas.height);
+  const contentSize = getEditorContentSize();
+  const dimensions = stickerPixelDimensions(sticker, contentSize.width, contentSize.height);
   const localX = dimensions.width / 2;
   const localY = -dimensions.height / 2;
   const cos = Math.cos(sticker.rotation);
   const sin = Math.sin(sticker.rotation);
-  const handleX = sticker.x * elements.canvas.width + localX * cos - localY * sin;
-  const handleY = sticker.y * elements.canvas.height + localX * sin + localY * cos;
-  const radius = Math.max(16, Math.min(elements.canvas.width, elements.canvas.height) * 0.022);
+  const handleX = sticker.x * contentSize.width + localX * cos - localY * sin;
+  const handleY = sticker.y * contentSize.height + localX * sin + localY * cos;
+  const radius = Math.max(16, Math.min(contentSize.width, contentSize.height) * 0.022);
   return Math.hypot(point.x - handleX, point.y - handleY) <= radius;
 }
 
 function isResizeHandleHit(point) {
   const sticker = selectedSticker();
   if (!sticker) return false;
-  const dimensions = stickerPixelDimensions(sticker, elements.canvas.width, elements.canvas.height);
+  const contentSize = getEditorContentSize();
+  const dimensions = stickerPixelDimensions(sticker, contentSize.width, contentSize.height);
   const localX = dimensions.width / 2;
   const localY = dimensions.height / 2;
   const cos = Math.cos(sticker.rotation);
   const sin = Math.sin(sticker.rotation);
-  const handleX = sticker.x * elements.canvas.width + localX * cos - localY * sin;
-  const handleY = sticker.y * elements.canvas.height + localX * sin + localY * cos;
-  const radius = Math.max(16, Math.min(elements.canvas.width, elements.canvas.height) * 0.026);
+  const handleX = sticker.x * contentSize.width + localX * cos - localY * sin;
+  const handleY = sticker.y * contentSize.height + localX * sin + localY * cos;
+  const radius = Math.max(16, Math.min(contentSize.width, contentSize.height) * 0.026);
   return Math.hypot(point.x - handleX, point.y - handleY) <= radius;
 }
 
@@ -1553,8 +1623,9 @@ function beginStickerDrag(event) {
   if (!point) return;
   if (isResizeHandleHit(point)) {
     const sticker = selectedSticker();
-    const centerX = sticker.x * elements.canvas.width;
-    const centerY = sticker.y * elements.canvas.height;
+    const contentSize = getEditorContentSize();
+    const centerX = sticker.x * contentSize.width;
+    const centerY = sticker.y * contentSize.height;
     state.draggingSticker = {
       mode: "resize",
       pointerId: event.pointerId,
@@ -1588,12 +1659,13 @@ function beginStickerDrag(event) {
     state.stickers.push(hit);
   }
   state.selectedStickerId = hit.uid;
+  const contentSize = getEditorContentSize();
   state.draggingSticker = {
     mode: "move",
     pointerId: event.pointerId,
     uid: hit.uid,
-    offsetX: point.x - hit.x * elements.canvas.width,
-    offsetY: point.y - hit.y * elements.canvas.height,
+    offsetX: point.x - hit.x * contentSize.width,
+    offsetY: point.y - hit.y * contentSize.height,
   };
   elements.canvas.setPointerCapture(event.pointerId);
   elements.canvas.classList.add("is-dragging-sticker");
@@ -1608,10 +1680,11 @@ function moveSticker(event) {
   const point = canvasPointFromEvent(event);
   const sticker = state.stickers.find((item) => item.uid === drag.uid);
   if (!point || !sticker) return;
+  const contentSize = getEditorContentSize();
   if (drag.mode === "resize") {
     const definition = stickerDefinitions.get(sticker.assetId);
-    const centerX = sticker.x * elements.canvas.width;
-    const centerY = sticker.y * elements.canvas.height;
+    const centerX = sticker.x * contentSize.width;
+    const centerY = sticker.y * contentSize.height;
     const distance = Math.max(1, Math.hypot(point.x - centerX, point.y - centerY));
     const baseScale = stickerBaseScale(definition);
     sticker.scale = clamp(drag.startScale * distance / drag.startDistance, baseScale * 0.45, baseScale * 1.9);
@@ -1620,11 +1693,11 @@ function moveSticker(event) {
     scheduleRender();
     return;
   }
-  const dimensions = stickerPixelDimensions(sticker, elements.canvas.width, elements.canvas.height);
-  const halfX = dimensions.width / 2 / elements.canvas.width;
-  const halfY = dimensions.height / 2 / elements.canvas.height;
-  sticker.x = clamp((point.x - drag.offsetX) / elements.canvas.width, halfX * 0.45, 1 - halfX * 0.45);
-  sticker.y = clamp((point.y - drag.offsetY) / elements.canvas.height, halfY * 0.45, 1 - halfY * 0.45);
+  const dimensions = stickerPixelDimensions(sticker, contentSize.width, contentSize.height);
+  const halfX = dimensions.width / 2 / contentSize.width;
+  const halfY = dimensions.height / 2 / contentSize.height;
+  sticker.x = clamp((point.x - drag.offsetX) / contentSize.width, halfX * 0.45, 1 - halfX * 0.45);
+  sticker.y = clamp((point.y - drag.offsetY) / contentSize.height, halfY * 0.45, 1 - halfY * 0.45);
   event.preventDefault();
   scheduleRender();
 }
@@ -1660,7 +1733,7 @@ function updatePatternUI() {
 }
 
 function updateOverlayUI() {
-  const cameraEnabled = state.cameraOverlay !== "off" || state.digicamFrame;
+  const cameraEnabled = state.cameraOverlay !== "off";
   elements.rotateCameraLeft.disabled = !cameraEnabled;
   elements.rotateCameraRight.disabled = !cameraEnabled;
   elements.cameraRotationValue.textContent = `${state.cameraRotation}°`;
@@ -1675,6 +1748,24 @@ function updateOverlayUI() {
     : "현재 사진 반복";
   setNormalizedRangeFill(elements.filmFrameCount);
   renderFilmSlotList();
+}
+
+function syncCompositeOverlayButtons() {
+  elements.xpOverlayButtons.forEach((item) => {
+    const selected = item.dataset.xpOverlay === (state.xpOverlay ? "on" : "off");
+    item.classList.toggle("is-selected", selected);
+    item.setAttribute("aria-pressed", String(selected));
+  });
+  elements.digicamFrameButtons.forEach((item) => {
+    const selected = item.dataset.digicamFrame === state.digicamFrame;
+    item.classList.toggle("is-selected", selected);
+    item.setAttribute("aria-pressed", String(selected));
+  });
+  elements.paintFrameButtons.forEach((item) => {
+    const selected = item.dataset.paintFrame === (state.paintFrame ? "on" : "off");
+    item.classList.toggle("is-selected", selected);
+    item.setAttribute("aria-pressed", String(selected));
+  });
 }
 
 function updateVnUI() {
@@ -1981,11 +2072,12 @@ function compactLiquifyHistory(activeStroke = null) {
 }
 
 function addLiquifyPoint(stroke, point, deltaX, deltaY, kind = "drag") {
+  const contentSize = getEditorContentSize();
   const brushPoint = {
-    x: point.x / elements.canvas.width,
-    y: point.y / elements.canvas.height,
-    dx: deltaX / elements.canvas.width,
-    dy: deltaY / elements.canvas.height,
+    x: point.x / contentSize.width,
+    y: point.y / contentSize.height,
+    dx: deltaX / contentSize.width,
+    dy: deltaY / contentSize.height,
     radius: state.liquifyBrushSize,
     kind,
     hold: 0,
@@ -2080,7 +2172,8 @@ function moveLiquifyPaint(event) {
   const deltaX = point.x - painting.lastX;
   const deltaY = point.y - painting.lastY;
   const distance = Math.hypot(deltaX, deltaY);
-  const spacing = Math.min(elements.canvas.width, elements.canvas.height)
+  const contentSize = getEditorContentSize();
+  const spacing = Math.min(contentSize.width, contentSize.height)
     * Math.max(0.0035, state.liquifyBrushSize * 0.045);
   if (distance < spacing) return true;
   stopLiquifyHold(painting);
@@ -2365,7 +2458,7 @@ function drawVnDialogue(ctx, width, height) {
   ctx.font = `400 ${bodySize}px ${fontFamily}`;
   ctx.textBaseline = "top";
   const textX = x + margin * 1.15;
-  const textY = y + nameHeight * 0.78;
+  const textY = y + nameHeight * 1.15;
   const maxWidth = boxWidth - margin * 2.3;
   const lineHeight = bodySize * 1.55;
   wrapVnText(ctx, state.vnDialogue || "대사를 입력하세요.", maxWidth, 3).forEach((line, index) => {
@@ -2373,11 +2466,13 @@ function drawVnDialogue(ctx, width, height) {
   });
 
   ctx.fillStyle = theme.accent;
-  const marker = Math.max(5, minSide * 0.009);
+  const marker = Math.max(11, minSide * 0.017);
+  const markerX = x + boxWidth - margin * 1.45 - marker;
+  const markerY = y + boxHeight - margin * 1.35 - marker;
   ctx.beginPath();
-  ctx.moveTo(x + boxWidth - margin * 0.9, y + boxHeight - margin * 0.72);
-  ctx.lineTo(x + boxWidth - margin * 0.9 + marker, y + boxHeight - margin * 0.72);
-  ctx.lineTo(x + boxWidth - margin * 0.9 + marker * 0.5, y + boxHeight - margin * 0.72 + marker);
+  ctx.moveTo(markerX, markerY);
+  ctx.lineTo(markerX + marker, markerY);
+  ctx.lineTo(markerX + marker * 0.5, markerY + marker);
   ctx.closePath();
   ctx.fill();
   ctx.restore();
@@ -2940,6 +3035,63 @@ function composeDigicamFrame(canvas, width, height) {
   ctx.fillText("FILTER_2000  3.2 MEGA PIXELS", body.x + body.width * 0.05, body.y + body.height * 0.955);
 }
 
+function roundedRectPath(ctx, x, y, width, height, radius) {
+  const safeRadius = Math.min(Math.max(0, radius), width / 2, height / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + safeRadius, y);
+  ctx.lineTo(x + width - safeRadius, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + safeRadius);
+  ctx.lineTo(x + width, y + height - safeRadius);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - safeRadius, y + height);
+  ctx.lineTo(x + safeRadius, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - safeRadius);
+  ctx.lineTo(x, y + safeRadius);
+  ctx.quadraticCurveTo(x, y, x + safeRadius, y);
+  ctx.closePath();
+}
+
+function composeRasterFrame(canvas, maxSide, definition) {
+  const image = definition?.image;
+  if (!image?.complete || !image.naturalWidth) {
+    return { width: canvas.width, height: canvas.height };
+  }
+
+  const source = snapshotCanvas(canvas);
+  const sourceX = definition.crop.x * image.naturalWidth;
+  const sourceY = definition.crop.y * image.naturalHeight;
+  const sourceWidth = definition.crop.width * image.naturalWidth;
+  const sourceHeight = definition.crop.height * image.naturalHeight;
+  const scale = maxSide / Math.max(sourceWidth, sourceHeight);
+  const width = Math.max(1, Math.round(sourceWidth * scale));
+  const height = Math.max(1, Math.round(sourceHeight * scale));
+
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(
+    image,
+    sourceX,
+    sourceY,
+    sourceWidth,
+    sourceHeight,
+    0,
+    0,
+    width,
+    height,
+  );
+
+  const screen = getRasterFrameScreenRect(width, height, definition);
+  ctx.save();
+  roundedRectPath(ctx, screen.x, screen.y, screen.width, screen.height, width * definition.radius);
+  ctx.clip();
+  drawImageCover(ctx, source, screen.x, screen.y, screen.width, screen.height);
+  ctx.restore();
+
+  return { width, height };
+}
+
 function drawCameraOverlay(ctx, width, height) {
   if (state.cameraOverlay === "off") return;
   const radians = state.cameraRotation * Math.PI / 180;
@@ -3002,7 +3154,14 @@ function drawProcessed(
   if (state.filmStrip) {
     finalOutput = composeFilmStrip(targetCanvas, maxSide, originalOnly, animationPhase, renderSeed);
   }
-  if (originalOnly) return finalOutput;
+  if (targetCanvas === elements.canvas) {
+    state.previewContentSize = { width: finalOutput.width, height: finalOutput.height };
+  }
+  const rasterFrame = getActiveRasterFrameDefinition();
+  if (originalOnly) {
+    if (rasterFrame) return composeRasterFrame(targetCanvas, maxSide, rasterFrame);
+    return finalOutput;
+  }
   const finalCtx = targetCanvas.getContext("2d", { willReadFrequently: true });
   const showStickerSelection = targetCanvas === elements.canvas
     && !(state.filter === "liquify" && state.liquifyMode === "brush");
@@ -3010,7 +3169,7 @@ function drawProcessed(
   if (state.showDate) addDateStamp(finalCtx, finalOutput.width, finalOutput.height);
   drawVnDialogue(finalCtx, finalOutput.width, finalOutput.height);
   if (state.xpOverlay) composeXpDesktop(targetCanvas, finalOutput.width, finalOutput.height);
-  if (state.digicamFrame) composeDigicamFrame(targetCanvas, finalOutput.width, finalOutput.height);
+  if (rasterFrame) finalOutput = composeRasterFrame(targetCanvas, maxSide, rasterFrame);
   else drawCameraOverlay(finalCtx, finalOutput.width, finalOutput.height);
 
   return finalOutput;
@@ -3089,6 +3248,7 @@ function resetEditor() {
   state.selectedStickerId = null;
   state.draggingSticker = null;
   state.liquifyStrokes = [];
+  state.previewContentSize = null;
   cancelActiveLiquifyPaint();
   clearFilmFrameImages();
   clearVnAssets();
@@ -3343,17 +3503,11 @@ elements.cameraOverlayButtons.forEach((button) => {
 elements.xpOverlayButtons.forEach((button) => {
   button.addEventListener("click", () => {
     state.xpOverlay = button.dataset.xpOverlay === "on";
-    if (state.xpOverlay) state.digicamFrame = false;
-    elements.xpOverlayButtons.forEach((item) => {
-      const selected = item === button;
-      item.classList.toggle("is-selected", selected);
-      item.setAttribute("aria-pressed", String(selected));
-    });
-    elements.digicamFrameButtons.forEach((item) => {
-      const selected = item.dataset.digicamFrame === (state.digicamFrame ? "on" : "off");
-      item.classList.toggle("is-selected", selected);
-      item.setAttribute("aria-pressed", String(selected));
-    });
+    if (state.xpOverlay) {
+      state.digicamFrame = "off";
+      state.paintFrame = false;
+    }
+    syncCompositeOverlayButtons();
     updateOverlayUI();
     scheduleRender();
   });
@@ -3361,18 +3515,25 @@ elements.xpOverlayButtons.forEach((button) => {
 
 elements.digicamFrameButtons.forEach((button) => {
   button.addEventListener("click", () => {
-    state.digicamFrame = button.dataset.digicamFrame === "on";
-    if (state.digicamFrame) state.xpOverlay = false;
-    elements.digicamFrameButtons.forEach((item) => {
-      const selected = item === button;
-      item.classList.toggle("is-selected", selected);
-      item.setAttribute("aria-pressed", String(selected));
-    });
-    elements.xpOverlayButtons.forEach((item) => {
-      const selected = item.dataset.xpOverlay === (state.xpOverlay ? "on" : "off");
-      item.classList.toggle("is-selected", selected);
-      item.setAttribute("aria-pressed", String(selected));
-    });
+    state.digicamFrame = button.dataset.digicamFrame;
+    if (state.digicamFrame !== "off") {
+      state.xpOverlay = false;
+      state.paintFrame = false;
+    }
+    syncCompositeOverlayButtons();
+    updateOverlayUI();
+    scheduleRender();
+  });
+});
+
+elements.paintFrameButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    state.paintFrame = button.dataset.paintFrame === "on";
+    if (state.paintFrame) {
+      state.xpOverlay = false;
+      state.digicamFrame = "off";
+    }
+    syncCompositeOverlayButtons();
     updateOverlayUI();
     scheduleRender();
   });
