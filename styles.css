@@ -1,3 +1,19 @@
+@font-face {
+  font-family: "Mona12";
+  src: url("https://cdn.jsdelivr.net/gh/MonadABXY/mona-font/web/Mona12TextKR.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Mona12";
+  src: url("https://cdn.jsdelivr.net/gh/MonadABXY/mona-font/web/Mona12TextKR-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   --ink: #171827;
   --ink-soft: #292b3d;
@@ -47,7 +63,9 @@ body {
     linear-gradient(rgba(23, 24, 39, 0.045) 1px, transparent 1px),
     linear-gradient(90deg, rgba(23, 24, 39, 0.045) 1px, transparent 1px);
   background-size: 24px 24px;
-  font-family: "Courier New", "Dotum", monospace;
+  font-family: "Mona12", "Dotum", monospace;
+  font-feature-settings: "locl" 1;
+  font-language-override: "KOR ";
   font-size: 16px;
   line-height: 1.6;
 }
@@ -211,7 +229,7 @@ button:disabled {
   place-items: center;
   border: 2px solid var(--ink);
   background: rgba(255, 255, 255, 0.2);
-  font-family: Arial, sans-serif;
+  font-family: "Mona12", "Dotum", sans-serif;
   line-height: 1;
 }
 
@@ -685,7 +703,7 @@ h2 {
   display: grid;
   place-items: center;
   color: #fff4a1;
-  font-family: Arial, sans-serif;
+  font-family: "Mona12", "Dotum", sans-serif;
   font-size: 1.25rem;
   font-weight: 900;
   letter-spacing: -0.25em;
