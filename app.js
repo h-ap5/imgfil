@@ -62,6 +62,7 @@ const elements = {
   clearFilmFrames: $("#clear-film-frames"),
   filmFrameStatus: $("#film-frame-status"),
   filmSlotList: $("#film-slot-list"),
+  xpOverlayButtons: $$('[data-xp-overlay]'),
 };
 
 const state = {
@@ -94,6 +95,7 @@ const state = {
   filmFrameCount: 2,
   filmFrameImages: [],
   pendingFilmSlot: null,
+  xpOverlay: false,
 };
 
 const stickerCatalog = window.STICKER_CATALOG || [];
@@ -123,6 +125,8 @@ const filterNames = {
   faded: "빛바랜 기억",
   softglow: "크림 뽀샤시",
   heartbokeh: "하트 보케",
+  milkyveil: "밀키 포트레이트",
+  hearttunnel: "핑크 하트 터널",
 };
 
 function formatDateInputValue(date) {
@@ -209,6 +213,8 @@ function presetFilter(name, strength) {
     faded: `brightness(${1 - 0.08 * s}) contrast(${1 - 0.24 * s}) saturate(${1 - 0.48 * s}) sepia(${0.08 * s})`,
     softglow: `brightness(${1 + 0.08 * s}) contrast(${1 - 0.2 * s}) saturate(${1 - 0.05 * s}) sepia(${0.04 * s})`,
     heartbokeh: `brightness(${1 - 0.03 * s}) contrast(${1 + 0.08 * s}) saturate(${1 + 0.12 * s})`,
+    milkyveil: `brightness(${1 + 0.13 * s}) contrast(${1 - 0.3 * s}) saturate(${1 - 0.24 * s}) sepia(${0.035 * s}) blur(${0.48 * s}px)`,
+    hearttunnel: `brightness(${1 + 0.035 * s}) contrast(${1 - 0.08 * s}) saturate(${1 + 0.06 * s})`,
   };
   return filters[name] || "none";
 }
@@ -705,6 +711,41 @@ function applySoftGlow(ctx, width, height, strength, animationPhase = 0) {
   addColorWash(ctx, width, height, "#fff1e7", 0.045 * strength, "screen");
 }
 
+function applyMilkyVeil(ctx, width, height, strength) {
+  if (strength <= 0.01) return;
+  const source = snapshotCanvas(ctx.canvas);
+  const minSide = Math.min(width, height);
+
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  ctx.globalAlpha = 0.08 + strength * 0.2;
+  ctx.filter = `blur(${Math.max(4, minSide * (0.009 + strength * 0.012))}px) brightness(1.08)`;
+  ctx.drawImage(source, 0, 0, width, height);
+  ctx.filter = "none";
+
+  const veil = ctx.createLinearGradient(0, 0, width, height);
+  veil.addColorStop(0, `rgba(255,246,250,${0.19 * strength})`);
+  veil.addColorStop(0.5, `rgba(247,249,255,${0.11 * strength})`);
+  veil.addColorStop(1, `rgba(240,229,239,${0.16 * strength})`);
+  ctx.fillStyle = veil;
+  ctx.fillRect(0, 0, width, height);
+
+  const faceLight = ctx.createRadialGradient(
+    width * 0.48,
+    height * 0.34,
+    0,
+    width * 0.48,
+    height * 0.34,
+    Math.max(width, height) * 0.68,
+  );
+  faceLight.addColorStop(0, `rgba(255,255,255,${0.14 * strength})`);
+  faceLight.addColorStop(0.5, `rgba(255,233,240,${0.06 * strength})`);
+  faceLight.addColorStop(1, "rgba(232,235,247,0)");
+  ctx.fillStyle = faceLight;
+  ctx.fillRect(0, 0, width, height);
+  ctx.restore();
+}
+
 function addHeartPath(ctx, x, y, size) {
   ctx.beginPath();
   ctx.moveTo(x, y + size * 0.38);
@@ -713,6 +754,61 @@ function addHeartPath(ctx, x, y, size) {
   ctx.bezierCurveTo(x, y - size * 0.2, x, y - size * 0.42, x + size * 0.2, y - size * 0.42);
   ctx.bezierCurveTo(x + size * 0.5, y - size * 0.42, x + size * 0.58, y + size * 0.02, x, y + size * 0.38);
   ctx.closePath();
+}
+
+function addSparklePath(ctx, x, y, radius) {
+  ctx.beginPath();
+  ctx.moveTo(x, y - radius);
+  ctx.quadraticCurveTo(x + radius * 0.16, y - radius * 0.16, x + radius, y);
+  ctx.quadraticCurveTo(x + radius * 0.16, y + radius * 0.16, x, y + radius);
+  ctx.quadraticCurveTo(x - radius * 0.16, y + radius * 0.16, x - radius, y);
+  ctx.quadraticCurveTo(x - radius * 0.16, y - radius * 0.16, x, y - radius);
+  ctx.closePath();
+}
+
+function applyHeartTunnel(ctx, width, height, strength) {
+  if (strength <= 0.01) return;
+  const minSide = Math.min(width, height);
+  const centerX = width * 0.5;
+  const centerY = height * 0.48;
+  const alpha = Math.pow(strength, 0.88);
+
+  ctx.save();
+  ctx.fillStyle = `rgba(232,129,176,${0.08 + alpha * 0.18})`;
+  ctx.fillRect(0, 0, width, height);
+
+  const sizes = [2.45, 1.94, 1.5, 1.12, 0.79, 0.5, 0.27];
+  sizes.forEach((scale, index) => {
+    ctx.save();
+    ctx.globalCompositeOperation = index % 2 === 0 ? "screen" : "soft-light";
+    ctx.globalAlpha = (index % 2 === 0 ? 0.32 : 0.5) * alpha;
+    ctx.strokeStyle = index % 2 === 0 ? "#fff8fc" : "#ec8db8";
+    ctx.lineWidth = minSide * Math.max(0.055, 0.13 - index * 0.011);
+    ctx.lineJoin = "round";
+    ctx.shadowColor = index % 2 === 0 ? "rgba(255,255,255,.92)" : "rgba(255,128,184,.72)";
+    ctx.shadowBlur = minSide * (0.02 + alpha * 0.025);
+    addHeartPath(ctx, centerX, centerY, minSide * scale);
+    ctx.stroke();
+    ctx.restore();
+  });
+
+  const sparkles = [
+    [0.12, 0.18, 0.022],
+    [0.82, 0.13, 0.018],
+    [0.9, 0.42, 0.025],
+    [0.18, 0.72, 0.017],
+    [0.73, 0.82, 0.021],
+    [0.36, 0.28, 0.013],
+  ];
+  ctx.globalCompositeOperation = "screen";
+  ctx.fillStyle = `rgba(255,255,255,${0.28 + alpha * 0.58})`;
+  ctx.shadowColor = "rgba(255,255,255,.92)";
+  ctx.shadowBlur = minSide * 0.018;
+  sparkles.forEach(([x, y, radius]) => {
+    addSparklePath(ctx, width * x, height * y, minSide * radius);
+    ctx.fill();
+  });
+  ctx.restore();
 }
 
 function applyHeartBokeh(ctx, width, height, strength, seed, animationPhase = 0) {
@@ -2031,6 +2127,8 @@ function applySelectedFilter(ctx, canvas, width, height, seed = state.seed, anim
   if (state.filter === "faded") applyFadedMemory(ctx, width, height, state.strength);
   if (state.filter === "softglow") applySoftGlow(ctx, width, height, state.strength, animationPhase);
   if (state.filter === "heartbokeh") applyHeartBokeh(ctx, width, height, state.strength, seed, animationPhase);
+  if (state.filter === "milkyveil") applyMilkyVeil(ctx, width, height, state.strength);
+  if (state.filter === "hearttunnel") applyHeartTunnel(ctx, width, height, state.strength);
 
   if (state.filter !== "comic") {
     addPixelEffects(ctx, width, height, state.filter, state.strength, state.grain, seed);
@@ -2148,6 +2246,168 @@ function composeFilmStrip(
   return { width, height };
 }
 
+function composeXpDesktop(canvas, width, height) {
+  const source = snapshotCanvas(canvas);
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  const minSide = Math.min(width, height);
+  const unit = Math.max(1, minSide * 0.003);
+  const taskbarHeight = Math.max(32, height * 0.09);
+  const fontSize = Math.max(9, Math.round(minSide * 0.022));
+  const titleHeight = Math.max(24, height * 0.052);
+  ctx.clearRect(0, 0, width, height);
+
+  const desktop = ctx.createLinearGradient(0, 0, width, height);
+  desktop.addColorStop(0, "#5a76df");
+  desktop.addColorStop(0.46, "#b8eafa");
+  desktop.addColorStop(0.72, "#8ca6f2");
+  desktop.addColorStop(1, "#4fc8e6");
+  ctx.fillStyle = desktop;
+  ctx.fillRect(0, 0, width, height);
+
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  [[0.15, 0.17, 0.25], [0.78, 0.22, 0.32], [0.43, 0.72, 0.38], [0.94, 0.78, 0.23]]
+    .forEach(([x, y, radius]) => {
+      const cloud = ctx.createRadialGradient(width * x, height * y, 0, width * x, height * y, minSide * radius);
+      cloud.addColorStop(0, "rgba(255,255,255,.72)");
+      cloud.addColorStop(0.38, "rgba(231,250,255,.34)");
+      cloud.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = cloud;
+      ctx.fillRect(0, 0, width, height - taskbarHeight);
+    });
+  ctx.restore();
+
+  ctx.font = `700 ${fontSize}px "Mona12", "Courier New", monospace`;
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "center";
+  const iconX = width * 0.055;
+  const iconSize = minSide * 0.052;
+  [[0.16, "PC", "#d8e5f4"], [0.34, "PIX", "#f4da62"], [0.52, "NET", "#8ee2ff"]]
+    .forEach(([y, label, color]) => {
+      const top = height * y;
+      ctx.fillStyle = "rgba(0,0,72,.28)";
+      ctx.fillRect(iconX - iconSize * 0.42 + unit, top - iconSize * 0.42 + unit, iconSize * 0.84, iconSize * 0.72);
+      ctx.fillStyle = color;
+      ctx.fillRect(iconX - iconSize * 0.42, top - iconSize * 0.42, iconSize * 0.84, iconSize * 0.72);
+      ctx.strokeStyle = "rgba(255,255,255,.86)";
+      ctx.lineWidth = unit;
+      ctx.strokeRect(iconX - iconSize * 0.42, top - iconSize * 0.42, iconSize * 0.84, iconSize * 0.72);
+      ctx.fillStyle = "#fff";
+      ctx.shadowColor = "#18327f";
+      ctx.shadowBlur = unit * 2;
+      ctx.fillText(label, iconX, top + iconSize * 0.62);
+      ctx.shadowBlur = 0;
+    });
+
+  const backX = width * 0.34;
+  const backY = height * 0.045;
+  const backW = width * 0.55;
+  const backH = height * 0.43;
+  ctx.fillStyle = "#d7d7d0";
+  ctx.strokeStyle = "#17317e";
+  ctx.lineWidth = unit * 1.4;
+  ctx.fillRect(backX, backY, backW, backH);
+  ctx.strokeRect(backX, backY, backW, backH);
+  const backTitle = ctx.createLinearGradient(backX, 0, backX + backW, 0);
+  backTitle.addColorStop(0, "#17278e");
+  backTitle.addColorStop(1, "#238fd9");
+  ctx.fillStyle = backTitle;
+  ctx.fillRect(backX + unit, backY + unit, backW - unit * 2, titleHeight);
+  ctx.fillStyle = "#fff";
+  ctx.textAlign = "left";
+  ctx.fillText("dream_folder", backX + titleHeight * 0.35, backY + titleHeight * 0.54);
+
+  const windowX = width * 0.13;
+  const windowY = height * 0.12;
+  const windowW = width * 0.72;
+  const windowH = height * 0.7;
+  const menuHeight = Math.max(18, height * 0.04);
+  ctx.fillStyle = "#d4d3cb";
+  ctx.strokeStyle = "#102672";
+  ctx.lineWidth = unit * 1.8;
+  ctx.fillRect(windowX, windowY, windowW, windowH);
+  ctx.strokeRect(windowX, windowY, windowW, windowH);
+  const title = ctx.createLinearGradient(windowX, 0, windowX + windowW, 0);
+  title.addColorStop(0, "#151a86");
+  title.addColorStop(0.58, "#116bd0");
+  title.addColorStop(1, "#28a6de");
+  ctx.fillStyle = title;
+  ctx.fillRect(windowX + unit, windowY + unit, windowW - unit * 2, titleHeight);
+  ctx.fillStyle = "#fff";
+  ctx.textAlign = "left";
+  ctx.fillText("memory_viewer.exe", windowX + titleHeight * 0.34, windowY + titleHeight * 0.54);
+
+  const buttonSize = titleHeight * 0.64;
+  ["_", "□", "×"].forEach((label, index) => {
+    const x = windowX + windowW - (3 - index) * (buttonSize + unit * 1.5);
+    ctx.fillStyle = index === 2 ? "#ef684c" : "#d7e2ef";
+    ctx.fillRect(x, windowY + titleHeight * 0.18, buttonSize, buttonSize);
+    ctx.strokeStyle = "#f7fbff";
+    ctx.lineWidth = unit;
+    ctx.strokeRect(x, windowY + titleHeight * 0.18, buttonSize, buttonSize);
+    ctx.fillStyle = index === 2 ? "#fff" : "#0e245d";
+    ctx.textAlign = "center";
+    ctx.fillText(label, x + buttonSize * 0.5, windowY + titleHeight * 0.5);
+  });
+
+  ctx.fillStyle = "#eeede7";
+  ctx.fillRect(windowX + unit * 2, windowY + titleHeight + unit, windowW - unit * 4, menuHeight);
+  ctx.fillStyle = "#252525";
+  ctx.textAlign = "left";
+  ctx.font = `400 ${Math.max(8, Math.round(fontSize * 0.84))}px "Mona12", "Courier New", monospace`;
+  ctx.fillText("File   Edit   View   Image   Help", windowX + menuHeight * 0.35, windowY + titleHeight + menuHeight * 0.52);
+
+  const imageX = windowX + windowW * 0.025;
+  const imageY = windowY + titleHeight + menuHeight + windowH * 0.025;
+  const imageW = windowW * 0.95;
+  const imageH = windowH - titleHeight - menuHeight - windowH * 0.065;
+  ctx.fillStyle = "#121722";
+  ctx.fillRect(imageX - unit * 2, imageY - unit * 2, imageW + unit * 4, imageH + unit * 4);
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(imageX, imageY, imageW, imageH);
+  ctx.clip();
+  drawImageCover(ctx, source, imageX, imageY, imageW, imageH);
+  ctx.restore();
+
+  const popupW = width * 0.3;
+  const popupH = height * 0.17;
+  const popupX = width * 0.64;
+  const popupY = height * 0.67;
+  ctx.fillStyle = "rgba(224,223,214,.96)";
+  ctx.strokeStyle = "#17317e";
+  ctx.lineWidth = unit * 1.4;
+  ctx.fillRect(popupX, popupY, popupW, popupH);
+  ctx.strokeRect(popupX, popupY, popupW, popupH);
+  ctx.fillStyle = "#1972c8";
+  ctx.fillRect(popupX + unit, popupY + unit, popupW - unit * 2, titleHeight * 0.78);
+  ctx.fillStyle = "#fff";
+  ctx.textAlign = "left";
+  ctx.fillText("FILTER_2000", popupX + titleHeight * 0.25, popupY + titleHeight * 0.4);
+  ctx.fillStyle = "#242424";
+  ctx.textAlign = "center";
+  ctx.fillText("MEMORY LOADED", popupX + popupW * 0.5, popupY + popupH * 0.62);
+
+  const taskbarY = height - taskbarHeight;
+  const bar = ctx.createLinearGradient(0, taskbarY, 0, height);
+  bar.addColorStop(0, "#3687e9");
+  bar.addColorStop(0.42, "#1e63ce");
+  bar.addColorStop(1, "#164aa8");
+  ctx.fillStyle = bar;
+  ctx.fillRect(0, taskbarY, width, taskbarHeight);
+  ctx.fillStyle = "#42a83d";
+  ctx.fillRect(0, taskbarY, width * 0.14, taskbarHeight);
+  ctx.fillStyle = "#fff";
+  ctx.font = `700 ${Math.max(9, Math.round(fontSize * 1.05))}px "Mona12", "Courier New", monospace`;
+  ctx.textAlign = "center";
+  ctx.fillText("START", width * 0.07, taskbarY + taskbarHeight * 0.52);
+  ctx.fillStyle = "#2098d5";
+  ctx.fillRect(width * 0.86, taskbarY, width * 0.14, taskbarHeight);
+  ctx.fillStyle = "#fff";
+  ctx.font = `400 ${Math.max(8, Math.round(fontSize * 0.82))}px "Mona12", "Courier New", monospace`;
+  ctx.fillText("8:52 PM", width * 0.93, taskbarY + taskbarHeight * 0.52);
+}
+
 function drawCameraUiLayer(ctx, width, height, language) {
   const top = height * 0.15;
   const bottom = height * 0.25;
@@ -2229,6 +2489,77 @@ function drawCameraUiLayer(ctx, width, height, language) {
   ctx.restore();
 }
 
+function drawDigicamUiLayer(ctx, width, height) {
+  const minSide = Math.min(width, height);
+  const inset = minSide * 0.044;
+  const unit = Math.max(1.5, minSide * 0.0032);
+  const typeSize = Math.max(11, Math.round(minSide * 0.03));
+  ctx.save();
+  ctx.lineCap = "square";
+  ctx.lineJoin = "miter";
+  ctx.lineWidth = unit;
+  ctx.strokeStyle = "rgba(255,255,255,.96)";
+  ctx.fillStyle = "rgba(255,255,255,.96)";
+  ctx.shadowColor = "rgba(0,0,0,.78)";
+  ctx.shadowBlur = unit * 1.6;
+  ctx.shadowOffsetX = unit * 0.65;
+  ctx.shadowOffsetY = unit * 0.65;
+  ctx.font = `700 ${typeSize}px "Mona12", "Courier New", monospace`;
+  ctx.textBaseline = "top";
+  ctx.textAlign = "left";
+
+  ctx.fillText("3M", inset, inset);
+  ctx.font = `400 ${Math.max(9, Math.round(typeSize * 0.68))}px "Mona12", "Courier New", monospace`;
+  ctx.fillText("FINE", inset, inset + typeSize * 1.15);
+  ctx.fillText("ISO AUTO", inset, inset + typeSize * 2.05);
+
+  const batteryWidth = minSide * 0.1;
+  const batteryHeight = batteryWidth * 0.42;
+  const batteryX = width - inset - batteryWidth;
+  const batteryY = inset;
+  ctx.strokeRect(batteryX, batteryY, batteryWidth, batteryHeight);
+  ctx.fillRect(batteryX + batteryWidth, batteryY + batteryHeight * 0.27, unit * 2, batteryHeight * 0.46);
+  ctx.fillRect(batteryX + unit * 1.4, batteryY + unit * 1.4, batteryWidth * 0.68, batteryHeight - unit * 2.8);
+
+  ctx.textAlign = "right";
+  ctx.fillText("100-0024", width - inset, batteryY + batteryHeight + typeSize * 0.42);
+  ctx.fillText("SD", width - inset, height - inset - typeSize);
+
+  const focusWidth = width * 0.22;
+  const focusHeight = height * 0.2;
+  const focusX = width * 0.5 - focusWidth * 0.5;
+  const focusY = height * 0.5 - focusHeight * 0.5;
+  const corner = Math.min(focusWidth, focusHeight) * 0.24;
+  ctx.beginPath();
+  ctx.moveTo(focusX, focusY + corner);
+  ctx.lineTo(focusX, focusY);
+  ctx.lineTo(focusX + corner, focusY);
+  ctx.moveTo(focusX + focusWidth - corner, focusY);
+  ctx.lineTo(focusX + focusWidth, focusY);
+  ctx.lineTo(focusX + focusWidth, focusY + corner);
+  ctx.moveTo(focusX + focusWidth, focusY + focusHeight - corner);
+  ctx.lineTo(focusX + focusWidth, focusY + focusHeight);
+  ctx.lineTo(focusX + focusWidth - corner, focusY + focusHeight);
+  ctx.moveTo(focusX + corner, focusY + focusHeight);
+  ctx.lineTo(focusX, focusY + focusHeight);
+  ctx.lineTo(focusX, focusY + focusHeight - corner);
+  ctx.stroke();
+
+  ctx.fillStyle = "rgba(145,255,91,.96)";
+  ctx.fillRect(focusX + focusWidth * 0.47, focusY + focusHeight * 0.45, focusWidth * 0.06, focusHeight * 0.1);
+  ctx.fillStyle = "rgba(255,255,255,.96)";
+  ctx.textAlign = "left";
+  ctx.fillText("⚡ AUTO", inset, height - inset - typeSize);
+  ctx.textAlign = "center";
+  ctx.fillText("W  ━━━━━  T", width * 0.5, height - inset - typeSize);
+
+  const dateText = state.dateValue.replaceAll("-", ".");
+  ctx.textAlign = "right";
+  ctx.fillStyle = "rgba(255,214,91,.96)";
+  ctx.fillText(dateText, width - inset, height - inset - typeSize * 2.15);
+  ctx.restore();
+}
+
 function drawCameraOverlay(ctx, width, height) {
   if (state.cameraOverlay === "off") return;
   const radians = state.cameraRotation * Math.PI / 180;
@@ -2239,7 +2570,8 @@ function drawCameraOverlay(ctx, width, height) {
   ctx.translate(width / 2, height / 2);
   ctx.rotate(radians);
   ctx.translate(-logicalWidth / 2, -logicalHeight / 2);
-  drawCameraUiLayer(ctx, logicalWidth, logicalHeight, state.cameraOverlay);
+  if (state.cameraOverlay === "digicam") drawDigicamUiLayer(ctx, logicalWidth, logicalHeight);
+  else drawCameraUiLayer(ctx, logicalWidth, logicalHeight, state.cameraOverlay);
   ctx.restore();
 }
 
@@ -2285,6 +2617,7 @@ function drawProcessed(
     finalOutput = composeFilmStrip(targetCanvas, maxSide, originalOnly, animationPhase, renderSeed);
   }
   if (originalOnly) return finalOutput;
+  if (state.xpOverlay) composeXpDesktop(targetCanvas, finalOutput.width, finalOutput.height);
   const finalCtx = targetCanvas.getContext("2d", { willReadFrequently: true });
   const showStickerSelection = targetCanvas === elements.canvas
     && !(state.filter === "liquify" && state.liquifyMode === "brush");
@@ -2612,6 +2945,18 @@ elements.cameraOverlayButtons.forEach((button) => {
       item.setAttribute("aria-pressed", String(selected));
     });
     updateOverlayUI();
+    scheduleRender();
+  });
+});
+
+elements.xpOverlayButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    state.xpOverlay = button.dataset.xpOverlay === "on";
+    elements.xpOverlayButtons.forEach((item) => {
+      const selected = item === button;
+      item.classList.toggle("is-selected", selected);
+      item.setAttribute("aria-pressed", String(selected));
+    });
     scheduleRender();
   });
 });

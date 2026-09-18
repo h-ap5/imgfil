@@ -207,6 +207,16 @@
                   <span class="filter-copy"><strong>하트 보케</strong><small>heart / light / bokeh</small></span>
                   <span class="filter-index">19</span>
                 </button>
+                <button class="filter-card" type="button" role="radio" aria-checked="false" data-filter="milkyveil">
+                  <span class="filter-swatch swatch-milkyveil" aria-hidden="true"></span>
+                  <span class="filter-copy"><strong>밀키 포트레이트</strong><small>milky / matte / portrait</small></span>
+                  <span class="filter-index">20</span>
+                </button>
+                <button class="filter-card" type="button" role="radio" aria-checked="false" data-filter="hearttunnel">
+                  <span class="filter-swatch swatch-hearttunnel" aria-hidden="true"></span>
+                  <span class="filter-copy"><strong>핑크 하트 터널</strong><small>heart / tunnel / sparkle</small></span>
+                  <span class="filter-index">21</span>
+                </button>
               </div>
             </section>
           </div>
@@ -315,11 +325,20 @@
                   <button class="is-selected" type="button" data-camera-overlay="off" aria-pressed="true">끔</button>
                   <button type="button" data-camera-overlay="ko" aria-pressed="false">한국어</button>
                   <button type="button" data-camera-overlay="en" aria-pressed="false">EN</button>
+                  <button type="button" data-camera-overlay="digicam" aria-pressed="false">디카</button>
                 </div>
                 <div class="camera-rotation-actions">
                   <button id="rotate-camera-left" class="compact-action" type="button" disabled>↶ 90°</button>
                   <output id="camera-rotation-value">0°</output>
                   <button id="rotate-camera-right" class="compact-action" type="button" disabled>90° ↷</button>
+                </div>
+              </fieldset>
+
+              <fieldset class="ratio-control overlay-control">
+                <legend>XP 데스크톱</legend>
+                <div class="segmented-control two-segment-control">
+                  <button class="is-selected" type="button" data-xp-overlay="off" aria-pressed="true">끔</button>
+                  <button type="button" data-xp-overlay="on" aria-pressed="false">켬</button>
                 </div>
               </fieldset>
 

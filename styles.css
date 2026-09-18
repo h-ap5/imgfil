@@ -710,6 +710,34 @@ h2 {
   text-shadow: -2px 0 #ff334f, 2px 0 #35f4df, 0 0 8px #ff5347;
 }
 
+.swatch-milkyveil {
+  filter: brightness(1.2) contrast(0.68) saturate(0.72);
+  background-image:
+    linear-gradient(135deg, transparent 42%, #f8eaf0 43% 65%, transparent 66%),
+    linear-gradient(#f8f2ef 0 46%, #aebab8 47%);
+}
+
+.swatch-milkyveil::after {
+  background:
+    radial-gradient(circle at 50% 36%, rgba(255,255,255,.72), transparent 48%),
+    linear-gradient(125deg, rgba(255,236,243,.34), rgba(234,242,255,.24));
+}
+
+.swatch-hearttunnel {
+  background-color: #efa6c5;
+  background-image: radial-gradient(circle at 50% 44%, #fff 0 10%, #dc7fac 11% 22%, #fff 23% 35%, #e7a0c0 36% 52%, #fff 53% 66%, #df8eb4 67%);
+}
+
+.swatch-hearttunnel::after {
+  content: "♡";
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 2rem;
+  font-weight: 700;
+  text-shadow: 0 0 7px rgba(255,255,255,.9);
+}
+
 .sticker-section {
   overflow: hidden;
 }
@@ -959,7 +987,7 @@ h2 {
 }
 
 .overlay-language-control {
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
 }
 
 .two-segment-control {
