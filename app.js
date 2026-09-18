@@ -30,6 +30,7 @@ const elements = {
   randomizePattern: $("#randomize-pattern"),
   ratioButtons: $$("[data-ratio]"),
   formatButtons: $$('[data-format]'),
+  gifExportNote: $("#gif-export-note"),
   dateToggle: $("#date-toggle"),
   dateInput: $("#date-input"),
   fileMeta: $("#file-meta"),
@@ -348,6 +349,12 @@ function applyNeonBrush(ctx, width, height, strength, strokes, seed, phaseOffset
   const minSide = Math.min(width, height);
   const basePhase = (seed % 991) / 991 * Math.PI * 2 + phaseOffset;
   const effectStrength = 0.38 + softenedLiquifyStrength(strength) * 0.62;
+  const pixelCount = width * height;
+  const offsetFieldX = new Float32Array(pixelCount);
+  const offsetFieldY = new Float32Array(pixelCount);
+  const influenceField = new Float32Array(pixelCount);
+  const chromaField = new Float32Array(pixelCount);
+  const radiusField = new Float32Array(pixelCount);
 
   strokes.forEach((stroke, strokeIndex) => {
     stroke.points.forEach((point, pointIndex) => {
@@ -369,9 +376,7 @@ function applyNeonBrush(ctx, width, height, strength, strokes, seed, phaseOffset
       const normalY = directionX;
       const dragScale = 2.2 + effectStrength * 2.4;
       const phase = basePhase + strokeIndex * 0.83 + pointIndex * 0.27;
-      const channelShift = Math.max(1, Math.round(
-        radius * (pointKind === "twirl" ? 0.035 : 0.07) * effectStrength,
-      ));
+      const channelShift = Math.max(0.7, radius * (pointKind === "twirl" ? 0.022 : 0.045) * effectStrength);
 
       for (let y = startY; y <= endY; y += 1) {
         const relativeY = y - centerY;
@@ -380,12 +385,13 @@ function applyNeonBrush(ctx, width, height, strength, strokes, seed, phaseOffset
           const distance = Math.hypot(relativeX, relativeY);
           if (distance > radius) continue;
           const normalized = distance / radius;
-          const falloff = Math.pow(1 - normalized, 2.15);
+          const falloff = Math.pow(1 - normalized, 1.55);
           let offsetX;
           let offsetY;
           if (pointKind === "twirl") {
             const hold = Math.min(3.2, Math.max(0.28, point.hold || 0.28));
-            const angle = (0.16 + hold * 0.68) * effectStrength * Math.pow(falloff, 0.72);
+            const animationPulse = 1 + Math.sin(phaseOffset + pointIndex * 0.7) * 0.08;
+            const angle = (0.18 + hold * 0.72) * effectStrength * Math.pow(falloff, 0.68) * animationPulse;
             const cosine = Math.cos(angle);
             const sine = Math.sin(angle);
             const rotatedX = relativeX * cosine - relativeY * sine;
@@ -395,7 +401,7 @@ function applyNeonBrush(ctx, width, height, strength, strokes, seed, phaseOffset
           } else if (hasMotion) {
             const along = relativeX * directionX + relativeY * directionY;
             const wave = Math.sin(along / radius * Math.PI * 3.8 + phase)
-              * radius * 0.072 * effectStrength * falloff;
+              * radius * 0.1 * effectStrength * falloff;
             offsetX = -motionX * dragScale * falloff + normalX * wave;
             offsetY = -motionY * dragScale * falloff + normalY * wave;
           } else {
@@ -403,41 +409,55 @@ function applyNeonBrush(ctx, width, height, strength, strokes, seed, phaseOffset
             const radialX = relativeX * inverseDistance;
             const radialY = relativeY * inverseDistance;
             const ripple = Math.sin(normalized * Math.PI * 6.5 + phase)
-              * radius * 0.11 * effectStrength * falloff;
+              * radius * 0.2 * effectStrength * falloff;
             const sidestep = Math.cos(normalized * Math.PI * 4.5 + phase)
-              * radius * 0.035 * effectStrength * falloff;
+              * radius * 0.065 * effectStrength * falloff;
             offsetX = radialX * ripple - radialY * sidestep;
             offsetY = radialY * ripple + radialX * sidestep;
           }
-          const sourceX = Math.round(clamp(
-            x + offsetX,
-            0,
-            width - 1,
-          ));
-          const sourceY = Math.round(clamp(
-            y + offsetY,
-            0,
-            height - 1,
-          ));
-          const redX = Math.round(clamp(sourceX + channelShift * falloff, 0, width - 1));
-          const blueX = Math.round(clamp(sourceX - channelShift * falloff, 0, width - 1));
-          const target = pixelIndex(x, y, width);
-          const centerSource = pixelIndex(sourceX, sourceY, width);
-          const redSource = pixelIndex(redX, sourceY, width);
-          const blueSource = pixelIndex(blueX, sourceY, width);
-          const mix = falloff * (pointKind === "twirl" ? 0.78 : 0.48 + effectStrength * 0.42);
-          const red = clamp(source[redSource] * 1.18 + source[blueSource + 2] * 0.07);
-          const green = clamp(source[centerSource + 1] * 0.72 + Math.min(red, source[blueSource + 2]) * 0.08);
-          const blue = clamp(source[blueSource + 2] * 1.24 + source[redSource] * 0.08);
-          // Always blend from the untouched frame. Re-blending already processed
-          // pixels made overlapping brush samples look like stacked circular stamps.
-          data[target] = mixChannel(source[target], red, mix);
-          data[target + 1] = mixChannel(source[target + 1], green, mix);
-          data[target + 2] = mixChannel(source[target + 2], blue, mix);
+          const fieldIndex = y * width + x;
+          offsetFieldX[fieldIndex] += offsetX;
+          offsetFieldY[fieldIndex] += offsetY;
+          influenceField[fieldIndex] = Math.max(influenceField[fieldIndex], falloff);
+          chromaField[fieldIndex] = Math.max(chromaField[fieldIndex], channelShift * falloff);
+          radiusField[fieldIndex] = Math.max(radiusField[fieldIndex], radius);
         }
       }
     });
   });
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const fieldIndex = y * width + x;
+      const influence = influenceField[fieldIndex];
+      if (influence <= 0) continue;
+      let offsetX = offsetFieldX[fieldIndex];
+      let offsetY = offsetFieldY[fieldIndex];
+      const offsetLength = Math.hypot(offsetX, offsetY);
+      const maxOffset = radiusField[fieldIndex] * 0.82;
+      if (offsetLength > maxOffset && maxOffset > 0) {
+        const scale = maxOffset / offsetLength;
+        offsetX *= scale;
+        offsetY *= scale;
+      }
+      const sourceX = Math.round(clamp(x + offsetX, 0, width - 1));
+      const sourceY = Math.round(clamp(y + offsetY, 0, height - 1));
+      const channelShift = chromaField[fieldIndex];
+      const redX = Math.round(clamp(sourceX + channelShift, 0, width - 1));
+      const blueX = Math.round(clamp(sourceX - channelShift, 0, width - 1));
+      const target = pixelIndex(x, y, width);
+      const centerSource = pixelIndex(sourceX, sourceY, width);
+      const redSource = pixelIndex(redX, sourceY, width);
+      const blueSource = pixelIndex(blueX, sourceY, width);
+      const mix = Math.min(0.96, 0.28 + influence * (0.52 + effectStrength * 0.18));
+      const red = clamp(source[redSource] * 1.1 + source[blueSource + 2] * 0.035);
+      const green = clamp(source[centerSource + 1] * 0.9 + Math.min(red, source[blueSource + 2]) * 0.035);
+      const blue = clamp(source[blueSource + 2] * 1.12 + source[redSource] * 0.04);
+      data[target] = mixChannel(source[target], red, mix);
+      data[target + 1] = mixChannel(source[target + 1], green, mix);
+      data[target + 2] = mixChannel(source[target + 2], blue, mix);
+    }
+  }
   ctx.putImageData(imageData, 0, 0);
 }
 
@@ -646,14 +666,16 @@ function applyFadedMemory(ctx, width, height, strength) {
   addColorWash(ctx, width, height, "#53666a", 0.1 * strength, "multiply");
   addColorWash(ctx, width, height, "#d8cabd", 0.04 * strength, "screen");
   addVignette(ctx, width, height, 0.16 * strength);
+  addOrangeLightLeak(ctx, width, height, strength);
 }
 
-function applySoftGlow(ctx, width, height, strength) {
+function applySoftGlow(ctx, width, height, strength, animationPhase = 0) {
   if (strength <= 0.01) return;
   const source = snapshotCanvas(ctx.canvas);
+  const breath = 1 + Math.sin(animationPhase) * 0.07 * strength;
   ctx.save();
   ctx.globalCompositeOperation = "screen";
-  ctx.globalAlpha = 0.12 + strength * 0.2;
+  ctx.globalAlpha = (0.12 + strength * 0.2) * breath;
   ctx.filter = `blur(${Math.max(4, Math.min(width, height) * (0.008 + strength * 0.012))}px) brightness(1.12)`;
   ctx.drawImage(source, 0, 0, width, height);
   ctx.filter = "none";
@@ -685,7 +707,7 @@ function addHeartPath(ctx, x, y, size) {
   ctx.closePath();
 }
 
-function applyHeartBokeh(ctx, width, height, strength, seed) {
+function applyHeartBokeh(ctx, width, height, strength, seed, animationPhase = 0) {
   if (strength <= 0.01) return;
   const source = snapshotCanvas(ctx.canvas);
   const sample = document.createElement("canvas");
@@ -695,33 +717,49 @@ function applyHeartBokeh(ctx, width, height, strength, seed) {
   sampleCtx.drawImage(source, 0, 0, sample.width, sample.height);
   const pixels = sampleCtx.getImageData(0, 0, sample.width, sample.height).data;
   const candidates = [];
-  const threshold = 198 - strength * 14;
+  const threshold = 176 - strength * 12;
 
   for (let y = 1; y < sample.height * 0.88; y += 1) {
     for (let x = 1; x < sample.width - 1; x += 1) {
       const index = pixelIndex(x, y, sample.width);
       const light = luminance(pixels, index);
-      if (light < threshold) continue;
+      const score = Math.max(pixels[index], pixels[index + 1], pixels[index + 2]) * 0.6 + light * 0.4;
+      if (score < threshold) continue;
       let localPeak = true;
       for (let offsetY = -1; offsetY <= 1 && localPeak; offsetY += 1) {
         for (let offsetX = -1; offsetX <= 1; offsetX += 1) {
           if (offsetX === 0 && offsetY === 0) continue;
-          if (luminance(pixels, pixelIndex(x + offsetX, y + offsetY, sample.width)) > light + 5) {
+          const neighborIndex = pixelIndex(x + offsetX, y + offsetY, sample.width);
+          const neighborLight = luminance(pixels, neighborIndex);
+          const neighborScore = Math.max(
+            pixels[neighborIndex],
+            pixels[neighborIndex + 1],
+            pixels[neighborIndex + 2],
+          ) * 0.6 + neighborLight * 0.4;
+          if (neighborScore > score + 5) {
             localPeak = false;
             break;
           }
         }
       }
-      if (localPeak) candidates.push({ x, y, light });
+      if (localPeak) candidates.push({
+        x,
+        y,
+        light,
+        score,
+        red: pixels[index],
+        green: pixels[index + 1],
+        blue: pixels[index + 2],
+      });
     }
   }
 
-  candidates.sort((left, right) => right.light - left.light);
+  candidates.sort((left, right) => right.score - left.score);
   const chosen = [];
-  const limit = Math.round(7 + strength * 15);
+  const limit = Math.round(6 + strength * 11);
   for (const candidate of candidates) {
     if (chosen.length >= limit) break;
-    if (chosen.some((item) => Math.hypot(item.x - candidate.x, item.y - candidate.y) < 3.2)) continue;
+    if (chosen.some((item) => Math.hypot(item.x - candidate.x, item.y - candidate.y) < 4)) continue;
     chosen.push(candidate);
   }
 
@@ -733,32 +771,64 @@ function applyHeartBokeh(ctx, width, height, strength, seed) {
   chosen.forEach((point, index) => {
     const x = (point.x + 0.5) / sample.width * width;
     const y = (point.y + 0.5) / sample.height * height;
-    const brightness = (point.light - threshold) / Math.max(1, 255 - threshold);
-    const size = minSide * (0.025 + strength * 0.034) * (0.74 + brightness * 0.52 + random() * 0.34);
+    const brightness = (point.score - threshold) / Math.max(1, 255 - threshold);
+    const depth = random();
+    const pulse = 1 + Math.sin(animationPhase + index * 0.83) * 0.08 * strength;
+    const size = minSide * (0.042 + strength * 0.052)
+      * (0.8 + brightness * 0.62 + depth * 0.56) * pulse;
     const lineWidth = Math.max(1.5, size * 0.1);
+
+    const halo = ctx.createRadialGradient(x, y, 0, x, y, size * 0.88);
+    halo.addColorStop(0, `rgba(${point.red},${point.green},${point.blue},${0.28 + brightness * 0.25})`);
+    halo.addColorStop(0.34, `rgba(255,214,126,${0.12 + strength * 0.08})`);
+    halo.addColorStop(1, "rgba(255,70,55,0)");
+    ctx.fillStyle = halo;
+    ctx.fillRect(x - size, y - size, size * 2, size * 2);
+
+    ctx.save();
+    ctx.globalCompositeOperation = "source-over";
+    ctx.globalAlpha = 0.1 + strength * 0.08;
+    ctx.fillStyle = "#16131f";
+    addHeartPath(ctx, x, y, size * 0.76);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.save();
+    ctx.globalAlpha = 0.34 + depth * 0.22;
+    ctx.filter = `blur(${Math.max(1, size * (0.12 + depth * 0.12))}px)`;
+    ctx.strokeStyle = "rgba(255,238,174,0.72)";
+    ctx.lineWidth = lineWidth * (2.1 + depth * 1.3);
+    ctx.shadowColor = "rgba(255,64,42,0.82)";
+    ctx.shadowBlur = size * 0.48;
+    addHeartPath(ctx, x, y, size * 1.04);
+    ctx.stroke();
+    ctx.restore();
+
     const offsets = [
-      { x: -lineWidth * 0.72, color: "rgba(255,36,68,0.78)" },
-      { x: lineWidth * 0.72, color: "rgba(51,245,222,0.72)" },
-      { x: 0, color: "rgba(255,244,176,0.9)" },
+      { x: -lineWidth * 1.35, y: lineWidth * 0.08, scale: 1.12, color: "rgba(255,31,65,0.9)" },
+      { x: lineWidth * 1.28, y: lineWidth * 0.2, scale: 1.07, color: "rgba(21,245,224,0.88)" },
+      { x: 0, y: -lineWidth * 0.62, scale: 1.02, color: "rgba(255,170,32,0.9)" },
+      { x: 0, y: 0, scale: 0.94, color: "rgba(255,249,190,0.94)" },
     ];
     offsets.forEach((edge, edgeIndex) => {
       ctx.save();
-      ctx.translate(edge.x, edgeIndex === 1 ? lineWidth * 0.18 : 0);
+      ctx.translate(edge.x, edge.y);
       ctx.strokeStyle = edge.color;
-      ctx.lineWidth = edgeIndex === 2 ? lineWidth * 0.7 : lineWidth;
+      ctx.lineWidth = edgeIndex === 3 ? lineWidth * 0.72 : lineWidth * 1.15;
       ctx.shadowColor = edge.color;
-      ctx.shadowBlur = size * (0.22 + strength * 0.22);
-      addHeartPath(ctx, x, y, size);
+      ctx.shadowBlur = size * (0.2 + strength * 0.24 + depth * 0.16);
+      addHeartPath(ctx, x, y, size * edge.scale);
       ctx.stroke();
       ctx.restore();
     });
-    if (index < 4) {
-      const core = ctx.createRadialGradient(x, y, 0, x, y, size * 0.25);
-      core.addColorStop(0, `rgba(255,255,235,${0.34 + brightness * 0.4})`);
-      core.addColorStop(1, "rgba(255,235,184,0)");
-      ctx.fillStyle = core;
-      ctx.fillRect(x - size * 0.3, y - size * 0.3, size * 0.6, size * 0.6);
-    }
+
+    ctx.save();
+    ctx.globalAlpha = 0.46 + brightness * 0.38;
+    ctx.strokeStyle = "rgba(255,255,241,0.9)";
+    ctx.lineWidth = Math.max(1, lineWidth * 0.46);
+    addHeartPath(ctx, x, y, size * 0.72);
+    ctx.stroke();
+    ctx.restore();
   });
   ctx.restore();
   addVignette(ctx, width, height, 0.12 * strength);
@@ -814,9 +884,7 @@ function addVerticalFilmDate(ctx, width, height, strength) {
   ctx.restore();
 }
 
-function applySummerFilm(ctx, width, height, strength) {
-  if (strength <= 0.01) return;
-  addColorWash(ctx, width, height, "#8ce7ee", 0.05 * strength, "screen");
+function addOrangeLightLeak(ctx, width, height, strength) {
   const leak = ctx.createLinearGradient(width * 0.58, 0, width, 0);
   leak.addColorStop(0, "rgba(255,70,28,0)");
   leak.addColorStop(0.55, `rgba(255,126,40,${0.08 * strength})`);
@@ -827,6 +895,12 @@ function applySummerFilm(ctx, width, height, strength) {
   ctx.fillStyle = leak;
   ctx.fillRect(0, 0, width, height);
   ctx.restore();
+}
+
+function applySummerFilm(ctx, width, height, strength) {
+  if (strength <= 0.01) return;
+  addColorWash(ctx, width, height, "#8ce7ee", 0.05 * strength, "screen");
+  addOrangeLightLeak(ctx, width, height, strength);
 
   const printFade = ctx.createLinearGradient(0, 0, 0, height);
   printFade.addColorStop(0, `rgba(15,20,22,${0.13 * strength})`);
@@ -878,14 +952,14 @@ function applyXerox(ctx, width, height, strength, seed) {
   const source = new Uint8ClampedArray(imageData.data);
   const data = imageData.data;
   const random = mulberry32(seed + 307);
-  const threshold = 144 - strength * 28;
-  const amount = 0.42 + strength * 0.58;
+  const threshold = 140 - strength * 14;
+  const amount = 0.28 + strength * 0.38;
 
   for (let i = 0; i < data.length; i += 4) {
     const light = luminance(source, i);
-    const grit = (random() - 0.5) * (46 + strength * 70);
+    const grit = (random() - 0.5) * (10 + strength * 17);
     const isInk = light + grit < threshold;
-    const isAcid = !isInk && light < threshold + 58 && (source[i + 1] > source[i] * 0.92 || random() < 0.08 * strength);
+    const isAcid = !isInk && light < threshold + 52 && (source[i + 1] > source[i] * 0.94 || random() < 0.035 * strength);
     const color = isInk ? [18, 19, 16] : isAcid ? [166, 255, 34] : [238, 234, 218];
     data[i] = mixChannel(source[i], color[0], amount);
     data[i + 1] = mixChannel(source[i + 1], color[1], amount);
@@ -937,7 +1011,6 @@ function applyComic(ctx, width, height, strength) {
   const light = new Uint8ClampedArray(width * height);
   const edgeThreshold = 82 - strength * 12;
   const inkThreshold = 38 + strength * 10;
-  const matrix = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
 
   for (let i = 0, p = 0; i < source.length; i += 4, p += 1) light[p] = luminance(source, i);
 
@@ -952,9 +1025,11 @@ function applyComic(ctx, width, height, strength) {
       const gy = Math.abs(light[down * width + x] - light[up * width + x]);
       const edge = gx + gy > edgeThreshold;
       const gray = clamp((light[y * width + x] - 128) * (1 + strength * 0.42) + 162);
-      const screenThreshold = (matrix[(y % 4) * 4 + (x % 4)] + 0.5) / 16 * 255;
       const shadowInk = gray < inkThreshold;
-      const toneInk = gray < 174 - strength * 8 && screenThreshold > gray + 92;
+      const diagonalHatch = (x + y * 2) % 11 === 0;
+      const crossHatch = (x * 2 - y + width * 2) % 13 === 0;
+      const toneInk = (gray < 150 - strength * 6 && diagonalHatch)
+        || (gray < 104 - strength * 4 && crossHatch);
       const value = edge || shadowInk || toneInk ? 0 : 255;
       data[target] = value;
       data[target + 1] = value;
@@ -1643,7 +1718,7 @@ function loadFilmSlotImage(file, index) {
 }
 
 function addLiquifyPoint(stroke, point, deltaX, deltaY, kind = "drag") {
-  if (liquifyPointCount() >= 96) return false;
+  if (liquifyPointCount() >= 180) return false;
   const brushPoint = {
     x: point.x / elements.canvas.width,
     y: point.y / elements.canvas.height,
@@ -1687,11 +1762,17 @@ function beginLiquifyPaint(event) {
   const point = canvasPointFromEvent(event);
   if (!point) return true;
   const stroke = { points: [] };
-  if (liquifyPointCount() >= 96) {
+  if (liquifyPointCount() >= 180) {
     event.preventDefault();
     return true;
   }
   state.liquifyStrokes.push(stroke);
+  const anchorPoint = addLiquifyPoint(stroke, point, 0, 0, "wave");
+  if (!anchorPoint) {
+    state.liquifyStrokes.pop();
+    event.preventDefault();
+    return true;
+  }
   const painting = {
     pointerId: event.pointerId,
     stroke,
@@ -1700,21 +1781,17 @@ function beginLiquifyPaint(event) {
     startX: point.x,
     startY: point.y,
     moved: false,
+    anchorPoint,
     holdPoint: null,
     holdTimeout: null,
     holdInterval: null,
   };
   state.paintingLiquify = painting;
+  scheduleRender();
   painting.holdTimeout = window.setTimeout(() => {
     if (state.paintingLiquify !== painting || painting.moved) return;
-    const holdPoint = addLiquifyPoint(
-      painting.stroke,
-      { x: painting.startX, y: painting.startY },
-      0,
-      0,
-      "twirl",
-    );
-    if (!holdPoint) return;
+    const holdPoint = painting.anchorPoint;
+    holdPoint.kind = "twirl";
     painting.holdPoint = holdPoint;
     holdPoint.hold = 0.34;
     scheduleRender();
@@ -1743,7 +1820,7 @@ function moveLiquifyPaint(event) {
   const deltaY = point.y - painting.lastY;
   const distance = Math.hypot(deltaX, deltaY);
   const spacing = Math.min(elements.canvas.width, elements.canvas.height)
-    * Math.max(0.005, state.liquifyBrushSize * 0.08);
+    * Math.max(0.0035, state.liquifyBrushSize * 0.045);
   if (distance < spacing) return true;
   stopLiquifyHold(painting);
   const steps = Math.min(10, Math.max(1, Math.ceil(distance / spacing)));
@@ -1774,7 +1851,7 @@ function endLiquifyPaint(event) {
   if (!state.paintingLiquify || state.paintingLiquify.pointerId !== event.pointerId) return false;
   const painting = state.paintingLiquify;
   stopLiquifyHold(painting);
-  if (!painting.moved && !painting.holdPoint) {
+  if (!painting.moved && !painting.holdPoint && !painting.anchorPoint) {
     addLiquifyPoint(
       painting.stroke,
       { x: painting.startX, y: painting.startY },
@@ -1807,8 +1884,8 @@ function patternPhaseRadians() {
   return state.patternPhase * Math.PI / 180;
 }
 
-function applySelectedFilter(ctx, canvas, width, height, seed = state.seed) {
-  const phase = patternPhaseRadians();
+function applySelectedFilter(ctx, canvas, width, height, seed = state.seed, animationPhase = 0) {
+  const phase = patternPhaseRadians() + animationPhase;
 
   if (state.filter === "softcam") {
     addBloom(ctx, canvas, width, height, state.strength, "#ffeef5");
@@ -1870,8 +1947,8 @@ function applySelectedFilter(ctx, canvas, width, height, seed = state.seed) {
   if (state.filter === "pixel") applyPixelate(ctx, width, height, state.strength);
   if (state.filter === "summerfilm") applySummerFilm(ctx, width, height, state.strength);
   if (state.filter === "faded") applyFadedMemory(ctx, width, height, state.strength);
-  if (state.filter === "softglow") applySoftGlow(ctx, width, height, state.strength);
-  if (state.filter === "heartbokeh") applyHeartBokeh(ctx, width, height, state.strength, seed);
+  if (state.filter === "softglow") applySoftGlow(ctx, width, height, state.strength, animationPhase);
+  if (state.filter === "heartbokeh") applyHeartBokeh(ctx, width, height, state.strength, seed, animationPhase);
 
   if (state.filter !== "comic") {
     addPixelEffects(ctx, width, height, state.filter, state.strength, state.grain, seed);
@@ -1891,7 +1968,7 @@ function drawImageCover(ctx, image, x, y, width, height) {
   ctx.drawImage(image, (sourceWidth - sw) / 2, (sourceHeight - sh) / 2, sw, sh, x, y, width, height);
 }
 
-function renderFilmFrame(image, width, height, seed, originalOnly = false) {
+function renderFilmFrame(image, width, height, seed, originalOnly = false, animationPhase = 0) {
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
@@ -1902,11 +1979,17 @@ function renderFilmFrame(image, width, height, seed, originalOnly = false) {
   ctx.filter = originalOnly ? "none" : presetFilter(presetName, state.strength);
   drawImageCover(ctx, image, 0, 0, width, height);
   ctx.filter = "none";
-  if (!originalOnly) applySelectedFilter(ctx, canvas, width, height, seed);
+  if (!originalOnly) applySelectedFilter(ctx, canvas, width, height, seed, animationPhase);
   return canvas;
 }
 
-function composeFilmStrip(targetCanvas, maxSide, originalOnly = false) {
+function composeFilmStrip(
+  targetCanvas,
+  maxSide,
+  originalOnly = false,
+  animationPhase = 0,
+  renderSeed = state.seed,
+) {
   const baseFrame = snapshotCanvas(targetCanvas);
   const count = state.filmFrameCount;
   const aspect = baseFrame.width / baseFrame.height;
@@ -1951,7 +2034,7 @@ function composeFilmStrip(targetCanvas, maxSide, originalOnly = false) {
     const y = band;
     const custom = state.filmFrameImages[index];
     const frame = custom
-      ? renderFilmFrame(custom.image, frameWidth, frameHeight, state.seed + index * 131, originalOnly)
+      ? renderFilmFrame(custom.image, frameWidth, frameHeight, renderSeed + index * 131, originalOnly, animationPhase)
       : baseFrame;
     ctx.save();
     ctx.beginPath();
@@ -1964,7 +2047,7 @@ function composeFilmStrip(targetCanvas, maxSide, originalOnly = false) {
     ctx.strokeRect(x + 0.5, y + 0.5, frameWidth - 1, frameHeight - 1);
   }
 
-  const random = mulberry32(state.seed + count * 41);
+  const random = mulberry32(renderSeed + count * 41);
   ctx.save();
   for (let index = 0; index < Math.round(5 + count * 1.5); index += 1) {
     ctx.globalAlpha = 0.08 + random() * 0.14;
@@ -2078,7 +2161,13 @@ function drawCameraOverlay(ctx, width, height) {
   ctx.restore();
 }
 
-function drawProcessed(targetCanvas, maxSide = 1500, originalOnly = false) {
+function drawProcessed(
+  targetCanvas,
+  maxSide = 1500,
+  originalOnly = false,
+  animationPhase = 0,
+  renderSeed = state.seed,
+) {
   if (!state.image) return null;
 
   const crop = getCrop(state.image.naturalWidth, state.image.naturalHeight, state.ratio);
@@ -2106,9 +2195,13 @@ function drawProcessed(targetCanvas, maxSide = 1500, originalOnly = false) {
   );
   ctx.filter = "none";
 
-  if (!originalOnly) applySelectedFilter(ctx, targetCanvas, output.width, output.height, state.seed);
+  if (!originalOnly) {
+    applySelectedFilter(ctx, targetCanvas, output.width, output.height, renderSeed, animationPhase);
+  }
   let finalOutput = output;
-  if (state.filmStrip) finalOutput = composeFilmStrip(targetCanvas, maxSide, originalOnly);
+  if (state.filmStrip) {
+    finalOutput = composeFilmStrip(targetCanvas, maxSide, originalOnly, animationPhase, renderSeed);
+  }
   if (originalOnly) return finalOutput;
   const finalCtx = targetCanvas.getContext("2d", { willReadFrequently: true });
   const showStickerSelection = targetCanvas === elements.canvas
@@ -2125,7 +2218,9 @@ function scheduleRender() {
   if (state.renderFrame) cancelAnimationFrame(state.renderFrame);
   elements.processing.hidden = false;
   state.renderFrame = requestAnimationFrame(() => {
-    const previewMaxSide = state.paintingLiquify ? 680 : 1500;
+    // Keep the live brush pass light enough to follow the pointer; the full
+    // preview is restored as soon as the stroke ends.
+    const previewMaxSide = state.paintingLiquify ? 560 : 1500;
     const output = drawProcessed(elements.canvas, previewMaxSide, state.comparing);
     elements.statusSize.textContent = `${output.width} × ${output.height} PX`;
     elements.processing.hidden = true;
@@ -2226,17 +2321,228 @@ function setComparing(active) {
   scheduleRender();
 }
 
-function updateDownloadButtonLabel(rendering = false) {
+const GIF_EXPORT = {
+  maxSide: 720,
+  durationMs: 2400,
+  fps: 10,
+  frameCount: 24,
+  delayCentiseconds: 10,
+};
+
+function gifAscii(value) {
+  return Uint8Array.from([...value].map((character) => character.charCodeAt(0)));
+}
+
+function gifUint16(value) {
+  return Uint8Array.of(value & 0xff, value >> 8 & 0xff);
+}
+
+function createRgb332Palette() {
+  const palette = new Uint8Array(256 * 3);
+  for (let index = 0; index < 256; index += 1) {
+    palette[index * 3] = Math.round(((index >> 5) & 7) * 255 / 7);
+    palette[index * 3 + 1] = Math.round(((index >> 2) & 7) * 255 / 7);
+    palette[index * 3 + 2] = Math.round((index & 3) * 255 / 3);
+  }
+  return palette;
+}
+
+function quantizeRgb332(imageData, width, height) {
+  const pixels = imageData.data;
+  const indices = new Uint8Array(width * height);
+  const bayer = [
+    0, 8, 2, 10,
+    12, 4, 14, 6,
+    3, 11, 1, 9,
+    15, 7, 13, 5,
+  ];
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const pixel = y * width + x;
+      const source = pixel * 4;
+      const dither = (bayer[(y & 3) * 4 + (x & 3)] - 7.5) * 1.35;
+      const red = Math.round(clamp(pixels[source] + dither) * 7 / 255);
+      const green = Math.round(clamp(pixels[source + 1] + dither) * 7 / 255);
+      const blue = Math.round(clamp(pixels[source + 2] + dither * 1.25) * 3 / 255);
+      indices[pixel] = red << 5 | green << 2 | blue;
+    }
+  }
+  return indices;
+}
+
+function encodeGifLzw(indices) {
+  const clearCode = 256;
+  const endCode = 257;
+  const bytes = [];
+  let dictionary = new Map();
+  let nextCode = 258;
+  let codeSize = 9;
+  let bitBuffer = 0;
+  let bitCount = 0;
+
+  const writeCode = (code) => {
+    bitBuffer |= code << bitCount;
+    bitCount += codeSize;
+    while (bitCount >= 8) {
+      bytes.push(bitBuffer & 0xff);
+      bitBuffer >>>= 8;
+      bitCount -= 8;
+    }
+  };
+
+  writeCode(clearCode);
+  let prefix = indices[0];
+  for (let index = 1; index < indices.length; index += 1) {
+    const suffix = indices[index];
+    const key = prefix * 256 + suffix;
+    const match = dictionary.get(key);
+    if (match !== undefined) {
+      prefix = match;
+      continue;
+    }
+
+    writeCode(prefix);
+    if (nextCode < 4096) {
+      dictionary.set(key, nextCode);
+      nextCode += 1;
+      if (nextCode === 1 << codeSize && codeSize < 12) codeSize += 1;
+    } else {
+      writeCode(clearCode);
+      dictionary = new Map();
+      nextCode = 258;
+      codeSize = 9;
+    }
+    prefix = suffix;
+  }
+  writeCode(prefix);
+  writeCode(endCode);
+  if (bitCount > 0) bytes.push(bitBuffer & 0xff);
+  return Uint8Array.from(bytes);
+}
+
+function splitGifSubBlocks(bytes) {
+  const blocks = [];
+  for (let offset = 0; offset < bytes.length; offset += 255) {
+    const length = Math.min(255, bytes.length - offset);
+    blocks.push(Uint8Array.of(length), bytes.slice(offset, offset + length));
+  }
+  blocks.push(Uint8Array.of(0));
+  return blocks;
+}
+
+function beginGif(width, height) {
+  return [
+    gifAscii("GIF89a"),
+    gifUint16(width),
+    gifUint16(height),
+    Uint8Array.of(0xf7, 0, 0),
+    createRgb332Palette(),
+    Uint8Array.of(0x21, 0xff, 0x0b),
+    gifAscii("NETSCAPE2.0"),
+    Uint8Array.of(0x03, 0x01, 0x00, 0x00, 0x00),
+  ];
+}
+
+function appendGifFrame(chunks, imageData, width, height, delayCentiseconds) {
+  const compressed = encodeGifLzw(quantizeRgb332(imageData, width, height));
+  chunks.push(
+    Uint8Array.of(
+      0x21, 0xf9, 0x04, 0x04,
+      delayCentiseconds & 0xff,
+      delayCentiseconds >> 8 & 0xff,
+      0x00, 0x00,
+      0x2c, 0x00, 0x00, 0x00, 0x00,
+    ),
+    gifUint16(width),
+    gifUint16(height),
+    Uint8Array.of(0x00, 0x08),
+    ...splitGifSubBlocks(compressed),
+  );
+}
+
+function safeDownloadBase() {
+  return state.fileName.replace(/\.[^/.]+$/, "").replace(/[^a-zA-Z0-9가-힣_-]+/g, "-") || "memory";
+}
+
+function triggerBlobDownload(blob, extension) {
+  const link = document.createElement("a");
+  link.download = `${safeDownloadBase()}-${state.filter}.${extension}`;
+  link.href = URL.createObjectURL(blob);
+  link.click();
+  window.setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+}
+
+function validateImageBlob(blob) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(blob);
+    const image = new Image();
+    image.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve();
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("생성된 이미지 파일을 다시 읽지 못했습니다."));
+    };
+    image.src = url;
+  });
+}
+
+function nextPaint() {
+  return new Promise((resolve) => requestAnimationFrame(() => window.setTimeout(resolve, 0)));
+}
+
+function updateDownloadButtonLabel(rendering = false, progress = "") {
   if (rendering) {
-    elements.downloadButton.textContent = "렌더링 중...";
+    elements.downloadButton.textContent = progress ? `GIF 렌더링 ${progress}` : "렌더링 중...";
     return;
   }
   const label = state.exportFormat.toUpperCase();
   elements.downloadButton.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0 5-5m-5 5-5-5M5 19h14" /></svg>${label}로 저장하기`;
 }
 
+async function downloadAnimatedGif() {
+  elements.downloadButton.disabled = true;
+  const frameCanvas = document.createElement("canvas");
+  let chunks = null;
+  try {
+    for (let index = 0; index < GIF_EXPORT.frameCount; index += 1) {
+      updateDownloadButtonLabel(true, `${index + 1}/${GIF_EXPORT.frameCount}`);
+      await nextPaint();
+      const phase = index / GIF_EXPORT.frameCount * Math.PI * 2;
+      const animateNoise = ["analog", "signal", "xerox"].includes(state.filter);
+      const renderSeed = animateNoise ? state.seed + index * 977 : state.seed;
+      const output = drawProcessed(frameCanvas, GIF_EXPORT.maxSide, false, phase, renderSeed);
+      if (!chunks) chunks = beginGif(output.width, output.height);
+      const frameContext = frameCanvas.getContext("2d", { willReadFrequently: true });
+      appendGifFrame(
+        chunks,
+        frameContext.getImageData(0, 0, output.width, output.height),
+        output.width,
+        output.height,
+        GIF_EXPORT.delayCentiseconds,
+      );
+    }
+    chunks.push(Uint8Array.of(0x3b));
+    const blob = new Blob(chunks, { type: "image/gif" });
+    await validateImageBlob(blob);
+    triggerBlobDownload(blob, "gif");
+    showToast(`${filterNames[state.filter]} · ${GIF_EXPORT.durationMs / 1000}초 GIF로 저장했어요.`);
+  } catch (error) {
+    console.error(error);
+    showToast("GIF 저장에 실패했어요. 더 작은 사진으로 다시 시도해 주세요.");
+  } finally {
+    elements.downloadButton.disabled = false;
+    updateDownloadButtonLabel();
+  }
+}
+
 function downloadImage() {
   if (!state.image) return;
+  if (state.exportFormat === "gif") {
+    void downloadAnimatedGif();
+    return;
+  }
   elements.downloadButton.disabled = true;
   updateDownloadButtonLabel(true);
   requestAnimationFrame(() => {
@@ -2252,13 +2558,8 @@ function downloadImage() {
           updateDownloadButtonLabel();
           return;
         }
-        const link = document.createElement("a");
-        const safeBase = state.fileName.replace(/\.[^/.]+$/, "").replace(/[^a-zA-Z0-9가-힣_-]+/g, "-");
         const actualFormat = blob.type === "image/webp" ? "webp" : "png";
-        link.download = `${safeBase || "memory"}-${state.filter}.${actualFormat}`;
-        link.href = URL.createObjectURL(blob);
-        link.click();
-        setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+        triggerBlobDownload(blob, actualFormat);
         updateDownloadButtonLabel();
         elements.downloadButton.disabled = false;
         const label = actualFormat.toUpperCase();
@@ -2404,6 +2705,7 @@ elements.formatButtons.forEach((button) => {
       item.classList.toggle("is-selected", selected);
       item.setAttribute("aria-pressed", String(selected));
     });
+    elements.gifExportNote.hidden = state.exportFormat !== "gif";
     updateDownloadButtonLabel();
   });
 });
