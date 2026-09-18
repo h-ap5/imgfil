@@ -13,7 +13,6 @@ const elements = {
   compareButton: $("#compare-button"),
   downloadButton: $("#download-button"),
   filterCards: $$(".filter-card"),
-  filterCount: $("#filter-count"),
   strengthRange: $("#strength-range"),
   strengthValue: $("#strength-value"),
   grainRange: $("#grain-range"),
@@ -41,7 +40,7 @@ const state = {
 
 const filterNames = {
   softcam: "흐릿한 아이폰",
-  y2k: "오줌 감성",
+  y2k: "Y2K 앰버",
   analog: "아날로그 TV",
   disposable: "일회용 플래시",
   ccd: "블루 CCD",
@@ -340,7 +339,7 @@ async function loadFile(file) {
     state.seed = Math.floor(Math.random() * 100000);
     updateLoadedUI(file);
     scheduleRender();
-    showToast("사진을 불러왔어요. 이제 감성을 골라 보세요.");
+    showToast("사진을 불러왔어요.");
   };
   image.onerror = () => {
     URL.revokeObjectURL(url);
@@ -443,7 +442,7 @@ window.addEventListener("paste", (event) => {
   if (imageItem) loadFile(imageItem.getAsFile());
 });
 
-elements.filterCards.forEach((card, index) => {
+elements.filterCards.forEach((card) => {
   card.addEventListener("click", () => {
     state.filter = card.dataset.filter;
     elements.filterCards.forEach((item) => {
@@ -451,7 +450,6 @@ elements.filterCards.forEach((card, index) => {
       item.classList.toggle("is-active", selected);
       item.setAttribute("aria-checked", String(selected));
     });
-    elements.filterCount.textContent = `${String(index + 1).padStart(2, "0")} / 05`;
     scheduleRender();
   });
 });

@@ -8,7 +8,7 @@
       content="사진을 브라우저 안에서 Y2K, 구형 아이폰, 아날로그 TV 감성으로 바꾸는 무료 이미지 필터 도구"
     />
     <meta name="theme-color" content="#171827" />
-    <title>FILTER_2000.exe — 나만의 추억 필터</title>
+    <title>FILTER_2000.exe — 레트로 이미지 필터</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="styles.css" />
   </head>
@@ -42,20 +42,10 @@
           </div>
         </div>
 
-        <div class="menu-bar" aria-hidden="true">
-          <span><u>F</u>ILE</span>
-          <span><u>E</u>FFECT</span>
-          <span><u>V</u>IEW</span>
-          <span><u>H</u>ELP</span>
-        </div>
-
         <div class="workspace">
           <section class="preview-panel" aria-labelledby="preview-heading">
             <div class="panel-heading">
-              <div>
-                <p class="eyebrow">01 / PREVIEW</p>
-                <h1 id="preview-heading">추억을 조금 망가뜨려 볼까요?</h1>
-              </div>
+              <h1 id="preview-heading">PREVIEW</h1>
               <button id="reset-button" class="icon-button" type="button" disabled aria-label="처음부터 다시 하기">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M4 4v6h6M5.5 9A7 7 0 1 1 5 16" />
@@ -73,9 +63,8 @@
                   <div class="empty-spark spark-one">✦</div>
                   <div class="empty-spark spark-two">✦</div>
                 </div>
-                <p class="empty-kicker">NO IMAGE DETECTED</p>
-                <h2>사진 한 장을 불러와 주세요</h2>
-                <p>클릭하거나 드래그 앤 드롭 · JPG, PNG, WEBP</p>
+                <h2>사진을 불러오세요</h2>
+                <p>JPG · PNG · WEBP</p>
                 <button id="upload-button" class="button button-primary" type="button">
                   <svg viewBox="0 0 24 24" aria-hidden="true">
                     <path d="M12 16V4m0 0L7 9m5-5 5 5M5 14v5h14v-5" />
@@ -83,7 +72,6 @@
                   사진 불러오기
                 </button>
               </div>
-              <div class="screen-overlay" aria-hidden="true"></div>
               <div id="processing-indicator" class="processing-indicator" hidden>
                 <span></span> PROCESSING...
               </div>
@@ -105,11 +93,7 @@
           <aside class="control-panel" aria-label="필터 설정">
             <section class="control-section" aria-labelledby="filter-title">
               <div class="section-title-row">
-                <div>
-                  <p class="eyebrow">02 / EFFECT</p>
-                  <h2 id="filter-title">필터 선택</h2>
-                </div>
-                <span id="filter-count" class="count-badge">01 / 05</span>
+                <h2 id="filter-title">필터</h2>
               </div>
 
               <div class="filter-list" role="radiogroup" aria-label="필터 프리셋">
@@ -120,7 +104,7 @@
                 </button>
                 <button class="filter-card" type="button" role="radio" aria-checked="false" data-filter="y2k">
                   <span class="filter-swatch swatch-y2k" aria-hidden="true"></span>
-                  <span class="filter-copy"><strong>오줌 감성</strong><small>yellow / flash / y2k</small></span>
+                  <span class="filter-copy"><strong>Y2K 앰버</strong><small>amber / flash / y2k</small></span>
                   <span class="filter-index">02</span>
                 </button>
                 <button class="filter-card" type="button" role="radio" aria-checked="false" data-filter="analog">
@@ -142,8 +126,7 @@
             </section>
 
             <section class="control-section settings-section" aria-labelledby="settings-title">
-              <p class="eyebrow">03 / TUNE</p>
-              <h2 id="settings-title">세부 조정</h2>
+              <h2 id="settings-title">조정</h2>
 
               <label class="range-control" for="strength-range">
                 <span><strong>필터 강도</strong><output id="strength-value">72%</output></span>
@@ -184,22 +167,9 @@
         </div>
 
         <div class="status-bar" aria-hidden="true">
-          <span>READY</span><span>RGB / 24 BIT</span><span id="status-size">0 × 0 PX</span>
+          <span id="status-size">0 × 0 PX</span>
         </div>
       </main>
-
-      <section class="info-strip" aria-label="사용 방법">
-        <article><span>01</span><strong>DROP</strong><p>사진을 불러오고</p></article>
-        <div class="info-arrow" aria-hidden="true">→</div>
-        <article><span>02</span><strong>DIRTY</strong><p>마음껏 낡게 만들고</p></article>
-        <div class="info-arrow" aria-hidden="true">→</div>
-        <article><span>03</span><strong>SAVE</strong><p>PNG로 간직하세요</p></article>
-      </section>
-
-      <footer>
-        <p>MADE FOR OLD MEMORIES &amp; NEW PHOTOS.</p>
-        <p>FILTER_2000.exe / LOCAL IMAGE LAB</p>
-      </footer>
     </div>
 
     <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
