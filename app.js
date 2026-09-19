@@ -136,6 +136,7 @@ const state = {
 };
 
 const stickerCatalog = window.STICKER_CATALOG || [];
+const assetVersion = "20260919-hqframes1";
 const customStickerCatalog = [];
 const stickerDefinitions = new Map(stickerCatalog.map((sticker) => [sticker.id, sticker]));
 const stickerAssets = new Map();
@@ -147,14 +148,14 @@ heartTunnelTexture.decoding = "async";
 heartTunnelTexture.onload = () => {
   if (state.image && state.filter === "hearttunnel") scheduleRender();
 };
-heartTunnelTexture.src = "assets/heart-tunnel.png";
+heartTunnelTexture.src = `assets/heart-tunnel.png?v=${assetVersion}`;
 
 const rasterFrameDefinitions = {
   horizontal: {
-    src: "assets/digicam-horizontal.png",
-    crop: { x: 5 / 236, y: 132 / 420, width: 226 / 236, height: 141 / 420 },
-    screen: { x: 18 / 226, y: 37 / 141, width: 106 / 226, height: 80 / 141 },
-    radius: 0.004,
+    src: "assets/digicam-horizontal-hq.png",
+    crop: { x: 0, y: 0, width: 1, height: 1 },
+    screen: { x: 0.067, y: 0.08, width: 0.677, height: 0.825 },
+    radius: 0.002,
   },
   portrait: {
     src: "assets/digicam-portrait.png",
@@ -163,22 +164,34 @@ const rasterFrameDefinitions = {
     radius: 0.03,
   },
   paint: {
-    src: "assets/paint-frame.png",
+    src: "assets/paint-frame-hq.svg",
     crop: { x: 0, y: 0, width: 1, height: 1 },
-    screen: { x: 37 / 236, y: 28 / 222, width: 188 / 236, height: 140 / 222 },
+    screen: { x: 176 / 1200, y: 142 / 1128, width: 948 / 1200, height: 632 / 1128 },
     radius: 0,
   },
 };
 
-Object.values(rasterFrameDefinitions).forEach((definition) => {
+function loadRasterFrameAsset(definition, retry = false) {
   const image = new Image();
   image.decoding = "async";
+  definition.loadError = false;
   image.onload = () => {
     definition.image = image;
+    definition.loadError = false;
     if (state.image) scheduleRender();
   };
-  image.src = definition.src;
-});
+  image.onerror = () => {
+    definition.image = null;
+    definition.loadError = true;
+    if (getActiveRasterFrameDefinition() === definition) {
+      showToast(`프레임 파일을 찾지 못했어요: ${definition.src}`);
+    }
+  };
+  const retryToken = retry ? `&retry=${Date.now()}` : "";
+  image.src = `${definition.src}?v=${assetVersion}${retryToken}`;
+}
+
+Object.values(rasterFrameDefinitions).forEach((definition) => loadRasterFrameAsset(definition));
 
 const filterNames = {
   softcam: "흐릿한 아이폰",
@@ -1570,6 +1583,18 @@ function getActiveRasterFrameDefinition() {
   if (state.paintFrame) return rasterFrameDefinitions.paint;
   if (state.digicamFrame !== "off") return rasterFrameDefinitions[state.digicamFrame] || null;
   return null;
+}
+
+function prepareRasterFrame(definition) {
+  if (!definition) return;
+  if (definition.loadError) {
+    showToast("프레임 이미지를 다시 불러오는 중이에요.");
+    loadRasterFrameAsset(definition, true);
+    return;
+  }
+  if (!definition.image?.complete || !definition.image.naturalWidth) {
+    showToast("프레임 이미지를 불러오는 중이에요. 잠시 후 자동 적용됩니다.");
+  }
 }
 
 function getRasterFrameScreenRect(width, height, definition) {
@@ -3572,6 +3597,9 @@ elements.digicamFrameButtons.forEach((button) => {
       state.xpOverlay = false;
       state.paintFrame = false;
     }
+    if (state.digicamFrame !== "off") {
+      prepareRasterFrame(rasterFrameDefinitions[state.digicamFrame]);
+    }
     syncCompositeOverlayButtons();
     updateOverlayUI();
     scheduleRender();
@@ -3585,6 +3613,7 @@ elements.paintFrameButtons.forEach((button) => {
       state.xpOverlay = false;
       state.digicamFrame = "off";
     }
+    if (state.paintFrame) prepareRasterFrame(rasterFrameDefinitions.paint);
     syncCompositeOverlayButtons();
     updateOverlayUI();
     scheduleRender();
