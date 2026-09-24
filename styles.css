@@ -1127,6 +1127,63 @@ h2 {
   margin-top: 8px;
 }
 
+.stream-tools {
+  display: grid;
+  gap: 16px;
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 2px solid var(--border-light);
+}
+
+.stream-theme-control,
+.stream-fit-control {
+  margin: 0;
+}
+
+.stream-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.stream-visibility-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.stream-visibility-grid label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 2px solid var(--border-light);
+  color: var(--text);
+  background: var(--ink-soft);
+  font-size: 0.875rem;
+  font-weight: 900;
+  cursor: pointer;
+  transition: border-color var(--duration), background-color var(--duration);
+}
+
+.stream-visibility-grid label:hover,
+.stream-visibility-grid label:focus-within {
+  border-color: var(--cyan);
+  background: var(--ink-raised);
+}
+
+.stream-visibility-grid input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--pink);
+}
+
+.stream-tools > .range-control {
+  margin-top: 0;
+}
+
 .camera-rotation-actions {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
@@ -1673,6 +1730,11 @@ input[type="range"]::-moz-range-thumb {
   .film-slot-pick .film-slot-thumb {
     width: 40px;
     height: 32px;
+  }
+
+  .stream-meta-grid,
+  .stream-visibility-grid {
+    grid-template-columns: 1fr;
   }
 
 }

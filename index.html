@@ -25,7 +25,7 @@
       type="font/woff2"
       crossorigin
     />
-    <link rel="stylesheet" href="styles.css?v=20260919-hqframes1" />
+    <link rel="stylesheet" href="styles.css?v=20260924-stream1" />
   </head>
   <body>
     <a class="skip-link" href="#editor">편집기로 바로가기</a>
@@ -442,6 +442,71 @@
                 </div>
               </fieldset>
 
+              <fieldset class="ratio-control overlay-control stream-overlay-control">
+                <legend>스트리밍 화면</legend>
+                <div class="segmented-control three-segment-control">
+                  <button class="is-selected" type="button" data-stream-frame="off" aria-pressed="true">끔</button>
+                  <button type="button" data-stream-frame="youtube" aria-pressed="false">YouTube</button>
+                  <button type="button" data-stream-frame="twitch" aria-pressed="false">Twitch</button>
+                </div>
+
+                <div id="stream-tools" class="stream-tools" hidden>
+                  <fieldset id="stream-theme-control" class="ratio-control stream-theme-control">
+                    <legend>YouTube 테마</legend>
+                    <div class="segmented-control two-segment-control">
+                      <button class="is-selected" type="button" data-stream-theme="dark" aria-pressed="true">어둡게</button>
+                      <button type="button" data-stream-theme="light" aria-pressed="false">밝게</button>
+                    </div>
+                  </fieldset>
+
+                  <label class="text-control" for="stream-title">
+                    <span>방송 제목</span>
+                    <input id="stream-title" type="text" maxlength="90" value="새벽의 라이브 방송" />
+                  </label>
+                  <label class="text-control" for="stream-channel">
+                    <span>채널명</span>
+                    <input id="stream-channel" type="text" maxlength="36" value="SOPHI LIVE" />
+                  </label>
+                  <div class="stream-meta-grid">
+                    <label class="text-control" for="stream-viewers">
+                      <span>시청자 수</span>
+                      <input id="stream-viewers" type="text" maxlength="16" value="1,458" />
+                    </label>
+                    <label class="text-control" for="stream-duration">
+                      <span>방송 시간</span>
+                      <input id="stream-duration" type="text" maxlength="12" value="2:26:16" />
+                    </label>
+                  </div>
+
+                  <div class="stream-visibility-grid" aria-label="방송 정보 표시">
+                    <label><input id="stream-show-title" type="checkbox" checked /> 제목</label>
+                    <label><input id="stream-show-channel" type="checkbox" checked /> 채널</label>
+                    <label><input id="stream-show-viewers" type="checkbox" checked /> 시청자</label>
+                    <label><input id="stream-show-duration" type="checkbox" checked /> 시간</label>
+                  </div>
+
+                  <fieldset class="ratio-control stream-fit-control">
+                    <legend>사진 맞춤</legend>
+                    <div class="segmented-control two-segment-control">
+                      <button class="is-selected" type="button" data-stream-fit="cover" aria-pressed="true">화면 채우기</button>
+                      <button type="button" data-stream-fit="contain" aria-pressed="false">전체 보기</button>
+                    </div>
+                  </fieldset>
+                  <label class="range-control" for="stream-zoom">
+                    <span><strong>사진 크기</strong><output id="stream-zoom-value">100%</output></span>
+                    <input id="stream-zoom" type="range" min="100" max="220" value="100" />
+                  </label>
+                  <label class="range-control" for="stream-position-x">
+                    <span><strong>가로 위치</strong><output id="stream-position-x-value">50%</output></span>
+                    <input id="stream-position-x" type="range" min="0" max="100" value="50" />
+                  </label>
+                  <label class="range-control" for="stream-position-y">
+                    <span><strong>세로 위치</strong><output id="stream-position-y-value">50%</output></span>
+                    <input id="stream-position-y" type="range" min="0" max="100" value="50" />
+                  </label>
+                </div>
+              </fieldset>
+
               <fieldset class="ratio-control overlay-control">
                 <legend>빈티지 필름 스트립</legend>
                 <div class="segmented-control two-segment-control">
@@ -493,7 +558,7 @@
     </div>
 
     <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
-    <script src="stickers.js?v=20260919-hqframes1"></script>
-    <script src="app.js?v=20260919-hqframes1"></script>
+    <script src="stickers.js?v=20260924-stream1"></script>
+    <script src="app.js?v=20260924-stream1"></script>
   </body>
 </html>

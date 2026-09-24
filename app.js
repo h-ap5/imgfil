@@ -65,6 +65,25 @@ const elements = {
   xpOverlayButtons: $$('[data-xp-overlay]'),
   digicamFrameButtons: $$('[data-digicam-frame]'),
   paintFrameButtons: $$('[data-paint-frame]'),
+  streamFrameButtons: $$('[data-stream-frame]'),
+  streamTools: $("#stream-tools"),
+  streamThemeControl: $("#stream-theme-control"),
+  streamThemeButtons: $$('[data-stream-theme]'),
+  streamTitle: $("#stream-title"),
+  streamChannel: $("#stream-channel"),
+  streamViewers: $("#stream-viewers"),
+  streamDuration: $("#stream-duration"),
+  streamShowTitle: $("#stream-show-title"),
+  streamShowChannel: $("#stream-show-channel"),
+  streamShowViewers: $("#stream-show-viewers"),
+  streamShowDuration: $("#stream-show-duration"),
+  streamFitButtons: $$('[data-stream-fit]'),
+  streamZoom: $("#stream-zoom"),
+  streamZoomValue: $("#stream-zoom-value"),
+  streamPositionX: $("#stream-position-x"),
+  streamPositionXValue: $("#stream-position-x-value"),
+  streamPositionY: $("#stream-position-y"),
+  streamPositionYValue: $("#stream-position-y-value"),
   vnModeButtons: $$('[data-vn-mode]'),
   vnStyleButtons: $$('[data-vn-style]'),
   vnFontButtons: $$('[data-vn-font]'),
@@ -121,6 +140,20 @@ const state = {
   xpOverlay: false,
   digicamFrame: "off",
   paintFrame: false,
+  streamFrame: "off",
+  streamTheme: "dark",
+  streamTitle: "새벽의 라이브 방송",
+  streamChannel: "SOPHI LIVE",
+  streamViewers: "1,458",
+  streamDuration: "2:26:16",
+  streamShowTitle: true,
+  streamShowChannel: true,
+  streamShowViewers: true,
+  streamShowDuration: true,
+  streamFit: "cover",
+  streamZoom: 1,
+  streamPositionX: 0.5,
+  streamPositionY: 0.5,
   previewContentSize: null,
   vnMode: "off",
   vnStyle: "classic",
@@ -136,7 +169,7 @@ const state = {
 };
 
 const stickerCatalog = window.STICKER_CATALOG || [];
-const assetVersion = "20260919-hqframes1";
+const assetVersion = "20260924-stream1";
 const customStickerCatalog = [];
 const stickerDefinitions = new Map(stickerCatalog.map((sticker) => [sticker.id, sticker]));
 const stickerAssets = new Map();
@@ -1625,6 +1658,9 @@ function canvasPointFromEvent(event) {
   if (rasterFrame?.image?.complete && rasterFrame.image.naturalWidth) {
     contentRect = getRasterFrameScreenRect(elements.canvas.width, elements.canvas.height, rasterFrame);
   }
+  else if (state.streamFrame !== "off") {
+    contentRect = getStreamImageRect(elements.canvas.width, elements.canvas.height, state.streamFrame);
+  }
   else if (state.xpOverlay) contentRect = getXpImageRect(elements.canvas.width, elements.canvas.height);
   if (!contentRect) {
     if (contentSize.width === elements.canvas.width && contentSize.height === elements.canvas.height) return point;
@@ -1820,7 +1856,37 @@ function updateOverlayUI() {
   elements.filmFrameStatus.textContent = activeFrames > 0
     ? `${activeFrames}장 지정 · 빈 칸은 현재 사진`
     : "현재 사진 반복";
+  const streamEnabled = state.streamFrame !== "off";
+  elements.streamTools.hidden = !streamEnabled;
+  elements.streamThemeControl.hidden = state.streamFrame !== "youtube";
+  elements.streamTitle.value = state.streamTitle;
+  elements.streamChannel.value = state.streamChannel;
+  elements.streamViewers.value = state.streamViewers;
+  elements.streamDuration.value = state.streamDuration;
+  elements.streamShowTitle.checked = state.streamShowTitle;
+  elements.streamShowChannel.checked = state.streamShowChannel;
+  elements.streamShowViewers.checked = state.streamShowViewers;
+  elements.streamShowDuration.checked = state.streamShowDuration;
+  elements.streamZoom.value = String(Math.round(state.streamZoom * 100));
+  elements.streamZoomValue.textContent = `${Math.round(state.streamZoom * 100)}%`;
+  elements.streamPositionX.value = String(Math.round(state.streamPositionX * 100));
+  elements.streamPositionXValue.textContent = `${Math.round(state.streamPositionX * 100)}%`;
+  elements.streamPositionY.value = String(Math.round(state.streamPositionY * 100));
+  elements.streamPositionYValue.textContent = `${Math.round(state.streamPositionY * 100)}%`;
+  elements.streamThemeButtons.forEach((item) => {
+    const selected = item.dataset.streamTheme === state.streamTheme;
+    item.classList.toggle("is-selected", selected);
+    item.setAttribute("aria-pressed", String(selected));
+  });
+  elements.streamFitButtons.forEach((item) => {
+    const selected = item.dataset.streamFit === state.streamFit;
+    item.classList.toggle("is-selected", selected);
+    item.setAttribute("aria-pressed", String(selected));
+  });
   setNormalizedRangeFill(elements.filmFrameCount);
+  setNormalizedRangeFill(elements.streamZoom);
+  setNormalizedRangeFill(elements.streamPositionX);
+  setNormalizedRangeFill(elements.streamPositionY);
   renderFilmSlotList();
 }
 
@@ -1837,6 +1903,11 @@ function syncCompositeOverlayButtons() {
   });
   elements.paintFrameButtons.forEach((item) => {
     const selected = item.dataset.paintFrame === (state.paintFrame ? "on" : "off");
+    item.classList.toggle("is-selected", selected);
+    item.setAttribute("aria-pressed", String(selected));
+  });
+  elements.streamFrameButtons.forEach((item) => {
+    const selected = item.dataset.streamFrame === state.streamFrame;
     item.classList.toggle("is-selected", selected);
     item.setAttribute("aria-pressed", String(selected));
   });
@@ -2400,6 +2471,434 @@ function drawImageCover(ctx, image, x, y, width, height) {
   if (sourceAspect > targetAspect) sw = sourceHeight * targetAspect;
   else sh = sourceWidth / targetAspect;
   ctx.drawImage(image, (sourceWidth - sw) / 2, (sourceHeight - sh) / 2, sw, sh, x, y, width, height);
+}
+
+function fillRoundedRect(ctx, x, y, width, height, radius, fillStyle) {
+  ctx.save();
+  roundedRectPath(ctx, x, y, width, height, radius);
+  ctx.fillStyle = fillStyle;
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawStreamImage(ctx, image, rect) {
+  const sourceWidth = image.naturalWidth || image.width;
+  const sourceHeight = image.naturalHeight || image.height;
+  if (!sourceWidth || !sourceHeight) return;
+  const targetAspect = rect.width / rect.height;
+  const sourceAspect = sourceWidth / sourceHeight;
+  const baseScale = state.streamFit === "contain"
+    ? Math.min(rect.width / sourceWidth, rect.height / sourceHeight)
+    : Math.max(rect.width / sourceWidth, rect.height / sourceHeight);
+  const scale = baseScale * state.streamZoom;
+  const drawWidth = sourceWidth * scale;
+  const drawHeight = sourceHeight * scale;
+  const overflowX = Math.max(0, drawWidth - rect.width);
+  const overflowY = Math.max(0, drawHeight - rect.height);
+  const x = rect.x + (rect.width - drawWidth) / 2 - overflowX * (state.streamPositionX - 0.5);
+  const y = rect.y + (rect.height - drawHeight) / 2 - overflowY * (state.streamPositionY - 0.5);
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(rect.x, rect.y, rect.width, rect.height);
+  ctx.clip();
+  ctx.fillStyle = "#09090b";
+  ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(image, x, y, drawWidth, drawHeight);
+  ctx.restore();
+}
+
+function fitCanvasFont(ctx, text, maxWidth, preferredSize, minimumSize, weight, family) {
+  let size = preferredSize;
+  const safeText = text || "";
+  while (size > minimumSize) {
+    ctx.font = `${weight} ${Math.round(size)}px ${family}`;
+    if (ctx.measureText(safeText).width <= maxWidth) break;
+    size -= 1;
+  }
+  return size;
+}
+
+function ellipsizeCanvasText(ctx, text, maxWidth) {
+  const characters = [...String(text || "")];
+  if (ctx.measureText(characters.join("")).width <= maxWidth) return characters.join("");
+  while (characters.length && ctx.measureText(`${characters.join("")}…`).width > maxWidth) characters.pop();
+  return `${characters.join("")}…`;
+}
+
+function wrapStreamTitle(ctx, text, maxWidth, maxLines = 2) {
+  const source = String(text || "").trim();
+  if (!source) return [];
+  const lines = [];
+  let line = "";
+  for (const character of [...source]) {
+    const candidate = line + character;
+    if (line && ctx.measureText(candidate).width > maxWidth) {
+      lines.push(line.trimEnd());
+      line = character.trimStart();
+      if (lines.length === maxLines) break;
+    } else {
+      line = candidate;
+    }
+  }
+  if (lines.length < maxLines && line) lines.push(line.trimEnd());
+  if (lines.length === maxLines) lines[maxLines - 1] = ellipsizeCanvasText(ctx, lines[maxLines - 1], maxWidth);
+  return lines;
+}
+
+function drawYoutubeMark(ctx, x, y, size) {
+  const width = size * 1.5;
+  const height = size;
+  fillRoundedRect(ctx, x, y, width, height, height * 0.24, "#ff0033");
+  ctx.fillStyle = "#fff";
+  ctx.beginPath();
+  ctx.moveTo(x + width * 0.43, y + height * 0.27);
+  ctx.lineTo(x + width * 0.43, y + height * 0.73);
+  ctx.lineTo(x + width * 0.72, y + height * 0.5);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawTwitchMark(ctx, x, y, size) {
+  ctx.save();
+  ctx.fillStyle = "#9147ff";
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(x + size, y);
+  ctx.lineTo(x + size, y + size * 0.72);
+  ctx.lineTo(x + size * 0.68, y + size);
+  ctx.lineTo(x + size * 0.45, y + size);
+  ctx.lineTo(x + size * 0.27, y + size * 1.18);
+  ctx.lineTo(x + size * 0.27, y + size);
+  ctx.lineTo(x, y + size);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(x + size * 0.28, y + size * 0.2, size * 0.16, size * 0.46);
+  ctx.fillRect(x + size * 0.6, y + size * 0.2, size * 0.16, size * 0.46);
+  ctx.restore();
+}
+
+function drawStreamAvatar(ctx, x, y, radius, color, label) {
+  const initial = [...String(label || "S").trim()][0] || "S";
+  ctx.save();
+  const glow = ctx.createLinearGradient(x - radius, y - radius, x + radius, y + radius);
+  glow.addColorStop(0, color);
+  glow.addColorStop(1, "#78dce8");
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(x, y, radius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(255,255,255,.9)";
+  ctx.lineWidth = Math.max(2, radius * 0.08);
+  ctx.stroke();
+  ctx.fillStyle = "#fff";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = `700 ${Math.round(radius * 0.92)}px Arial, sans-serif`;
+  ctx.fillText(initial.toUpperCase(), x, y + radius * 0.06);
+  ctx.restore();
+}
+
+function drawLiveBadge(ctx, x, y, height) {
+  const width = height * 2.1;
+  fillRoundedRect(ctx, x, y, width, height, height * 0.18, "#e91916");
+  ctx.fillStyle = "#fff";
+  ctx.font = `700 ${Math.round(height * 0.5)}px Arial, sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("LIVE", x + width / 2, y + height * 0.53);
+}
+
+function drawPlayerControls(ctx, rect, options = {}) {
+  const unit = Math.max(1, Math.min(rect.width, rect.height) * 0.006);
+  const barHeight = rect.height * 0.13;
+  const gradient = ctx.createLinearGradient(0, rect.y + rect.height - barHeight, 0, rect.y + rect.height);
+  gradient.addColorStop(0, "rgba(0,0,0,0)");
+  gradient.addColorStop(1, "rgba(0,0,0,.82)");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(rect.x, rect.y + rect.height - barHeight, rect.width, barHeight);
+
+  const progressY = rect.y + rect.height - barHeight * 0.48;
+  ctx.fillStyle = "rgba(255,255,255,.34)";
+  ctx.fillRect(rect.x + rect.width * 0.025, progressY, rect.width * 0.95, unit);
+  ctx.fillStyle = options.accent || "#f00";
+  ctx.fillRect(rect.x + rect.width * 0.025, progressY, rect.width * 0.38, unit);
+
+  const iconY = rect.y + rect.height - barHeight * 0.24;
+  const icon = barHeight * 0.22;
+  ctx.fillStyle = "#fff";
+  ctx.beginPath();
+  ctx.moveTo(rect.x + rect.width * 0.03, iconY - icon * 0.65);
+  ctx.lineTo(rect.x + rect.width * 0.03, iconY + icon * 0.65);
+  ctx.lineTo(rect.x + rect.width * 0.03 + icon, iconY);
+  ctx.closePath();
+  ctx.fill();
+
+  const speakerX = rect.x + rect.width * 0.065;
+  ctx.fillRect(speakerX, iconY - icon * 0.25, icon * 0.32, icon * 0.5);
+  ctx.beginPath();
+  ctx.moveTo(speakerX + icon * 0.32, iconY - icon * 0.25);
+  ctx.lineTo(speakerX + icon * 0.78, iconY - icon * 0.63);
+  ctx.lineTo(speakerX + icon * 0.78, iconY + icon * 0.63);
+  ctx.lineTo(speakerX + icon * 0.32, iconY + icon * 0.25);
+  ctx.closePath();
+  ctx.fill();
+
+  if (state.streamShowDuration && state.streamDuration.trim()) {
+    ctx.font = `600 ${Math.max(10, Math.round(barHeight * 0.2))}px Arial, sans-serif`;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText(state.streamDuration.trim(), rect.x + rect.width * 0.105, iconY);
+  }
+
+  const right = rect.x + rect.width * 0.965;
+  ctx.strokeStyle = "#fff";
+  ctx.lineWidth = unit * 0.75;
+  ctx.strokeRect(right - icon * 1.05, iconY - icon * 0.6, icon * 1.05, icon * 1.2);
+  ctx.beginPath();
+  ctx.arc(right - icon * 2.35, iconY, icon * 0.55, 0, Math.PI * 2);
+  ctx.stroke();
+}
+
+function getStreamOutputSize(maxSide, platform = state.streamFrame) {
+  const aspect = platform === "twitch" ? 3 / 2 : 4 / 3;
+  return {
+    width: Math.max(1, Math.round(maxSide)),
+    height: Math.max(1, Math.round(maxSide / aspect)),
+  };
+}
+
+function getStreamImageRect(width, height, platform = state.streamFrame) {
+  if (platform === "twitch") {
+    const top = height * 0.07;
+    const left = width * 0.06;
+    const playerWidth = width - left;
+    return { x: left, y: top, width: playerWidth, height: playerWidth * 9 / 16 };
+  }
+  const playerWidth = width * 0.92;
+  return { x: width * 0.04, y: height * 0.08, width: playerWidth, height: playerWidth * 9 / 16 };
+}
+
+function drawYoutubeStreamFrame(ctx, width, height, source) {
+  const dark = state.streamTheme === "dark";
+  const colors = dark
+    ? { page: "#0f0f0f", panel: "#181818", text: "#f1f1f1", muted: "#aaa", pill: "#2a2a2a", border: "#303030" }
+    : { page: "#fff", panel: "#fff", text: "#0f0f0f", muted: "#606060", pill: "#f2f2f2", border: "#dedede" };
+  const rect = getStreamImageRect(width, height, "youtube");
+  const unit = Math.max(1, Math.min(width, height) * 0.004);
+  const pad = width * 0.04;
+  const headerHeight = height * 0.065;
+
+  ctx.fillStyle = colors.page;
+  ctx.fillRect(0, 0, width, height);
+  ctx.fillStyle = colors.panel;
+  ctx.fillRect(0, 0, width, headerHeight);
+  ctx.strokeStyle = colors.border;
+  ctx.lineWidth = unit * 0.6;
+  ctx.beginPath();
+  ctx.moveTo(0, headerHeight);
+  ctx.lineTo(width, headerHeight);
+  ctx.stroke();
+
+  drawYoutubeMark(ctx, pad, headerHeight * 0.29, headerHeight * 0.38);
+  ctx.fillStyle = colors.text;
+  ctx.font = `700 ${Math.round(headerHeight * 0.27)}px Arial, sans-serif`;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  ctx.fillText("YouTube", pad + headerHeight * 0.66, headerHeight * 0.49);
+  fillRoundedRect(ctx, width * 0.34, headerHeight * 0.2, width * 0.32, headerHeight * 0.58, headerHeight * 0.29, colors.pill);
+  ctx.fillStyle = colors.muted;
+  ctx.font = `400 ${Math.round(headerHeight * 0.21)}px Arial, sans-serif`;
+  ctx.fillText("검색", width * 0.36, headerHeight * 0.5);
+  ctx.strokeStyle = colors.muted;
+  ctx.lineWidth = unit * 0.6;
+  ctx.beginPath();
+  ctx.arc(width * 0.69, headerHeight * 0.45, headerHeight * 0.12, 0, Math.PI * 2);
+  ctx.moveTo(width * 0.69 + headerHeight * 0.085, headerHeight * 0.535);
+  ctx.lineTo(width * 0.69 + headerHeight * 0.17, headerHeight * 0.62);
+  ctx.stroke();
+
+  drawStreamImage(ctx, source, rect);
+  drawLiveBadge(ctx, rect.x + rect.width * 0.018, rect.y + rect.height * 0.025, rect.height * 0.052);
+  drawPlayerControls(ctx, rect, { accent: "#ff0033" });
+
+  const infoY = rect.y + rect.height + height * 0.025;
+  const avatarRadius = height * 0.037;
+  drawStreamAvatar(ctx, pad + avatarRadius, infoY + avatarRadius, avatarRadius, "#ff416c", state.streamChannel);
+  const textX = pad + avatarRadius * 2.45;
+  const rightReserve = width * 0.28;
+  const maxTextWidth = width - textX - rightReserve;
+  let cursorY = infoY;
+
+  if (state.streamShowTitle && state.streamTitle.trim()) {
+    const titleSize = fitCanvasFont(ctx, state.streamTitle.trim(), maxTextWidth * 1.8, height * 0.03, height * 0.021, 700, "Arial, sans-serif");
+    ctx.font = `700 ${Math.round(titleSize)}px Arial, sans-serif`;
+    ctx.fillStyle = colors.text;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    const titleLines = wrapStreamTitle(ctx, state.streamTitle.trim(), maxTextWidth, 2);
+    titleLines.forEach((line, index) => ctx.fillText(line, textX, cursorY + index * titleSize * 1.24));
+    cursorY += Math.max(titleSize * 1.3, titleLines.length * titleSize * 1.24);
+  }
+
+  if (state.streamShowChannel && state.streamChannel.trim()) {
+    ctx.fillStyle = colors.text;
+    ctx.font = `600 ${Math.round(height * 0.02)}px Arial, sans-serif`;
+    ctx.fillText(ellipsizeCanvasText(ctx, state.streamChannel.trim(), maxTextWidth * 0.68), textX, cursorY);
+    cursorY += height * 0.03;
+  }
+  if (state.streamShowViewers && state.streamViewers.trim()) {
+    ctx.fillStyle = colors.muted;
+    ctx.font = `400 ${Math.round(height * 0.017)}px Arial, sans-serif`;
+    ctx.fillText(`시청자 ${state.streamViewers.trim()}명`, textX, cursorY);
+  }
+
+  const subscribeW = width * 0.105;
+  const subscribeH = height * 0.046;
+  const subscribeX = width - pad - subscribeW;
+  const subscribeY = infoY + height * 0.012;
+  fillRoundedRect(ctx, subscribeX, subscribeY, subscribeW, subscribeH, subscribeH / 2, dark ? "#f1f1f1" : "#0f0f0f");
+  ctx.fillStyle = dark ? "#0f0f0f" : "#fff";
+  ctx.font = `700 ${Math.round(subscribeH * 0.36)}px Arial, sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("구독", subscribeX + subscribeW / 2, subscribeY + subscribeH / 2);
+  ctx.textAlign = "left";
+}
+
+function drawTwitchStreamFrame(ctx, width, height, source) {
+  const topHeight = height * 0.07;
+  const sideWidth = width * 0.06;
+  const rect = getStreamImageRect(width, height, "twitch");
+  const infoY = rect.y + rect.height;
+  const unit = Math.max(1, Math.min(width, height) * 0.004);
+
+  ctx.fillStyle = "#f7f7f8";
+  ctx.fillRect(0, 0, width, height);
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, width, topHeight);
+  ctx.shadowColor = "rgba(0,0,0,.12)";
+  ctx.shadowBlur = unit * 2;
+  ctx.shadowOffsetY = unit;
+  ctx.fillRect(0, topHeight - unit, width, unit);
+  ctx.shadowColor = "transparent";
+
+  const markSize = topHeight * 0.42;
+  drawTwitchMark(ctx, topHeight * 0.24, topHeight * 0.2, markSize);
+  ctx.fillStyle = "#18181b";
+  ctx.font = `700 ${Math.round(topHeight * 0.25)}px Arial, sans-serif`;
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "left";
+  ctx.fillText("탐색", topHeight * 0.24 + markSize * 1.55, topHeight * 0.5);
+  ctx.fillText("⋮", width * 0.09, topHeight * 0.49);
+
+  const searchW = width * 0.34;
+  const searchH = topHeight * 0.64;
+  const searchX = width * 0.3;
+  fillRoundedRect(ctx, searchX, topHeight * 0.18, searchW, searchH, searchH * 0.12, "#efeff1");
+  ctx.strokeStyle = "#8e8e93";
+  ctx.lineWidth = unit * 0.45;
+  roundedRectPath(ctx, searchX, topHeight * 0.18, searchW, searchH, searchH * 0.12);
+  ctx.stroke();
+  ctx.fillStyle = "#53535f";
+  ctx.font = `400 ${Math.round(topHeight * 0.22)}px Arial, sans-serif`;
+  ctx.fillText("검색", searchX + searchH * 0.35, topHeight * 0.5);
+  fillRoundedRect(ctx, width * 0.825, topHeight * 0.22, width * 0.06, topHeight * 0.56, topHeight * 0.28, "#efeff1");
+  fillRoundedRect(ctx, width * 0.892, topHeight * 0.22, width * 0.075, topHeight * 0.56, topHeight * 0.28, "#9147ff");
+  ctx.fillStyle = "#18181b";
+  ctx.font = `700 ${Math.round(topHeight * 0.19)}px Arial, sans-serif`;
+  ctx.textAlign = "center";
+  ctx.fillText("로그인", width * 0.855, topHeight * 0.5);
+  ctx.fillStyle = "#fff";
+  ctx.fillText("회원가입", width * 0.9295, topHeight * 0.5);
+
+  ctx.fillStyle = "#efeff1";
+  ctx.fillRect(0, topHeight, sideWidth, height - topHeight);
+  const avatarRadius = sideWidth * 0.25;
+  const avatarColors = ["#9147ff", "#e91916", "#18a558", "#477cff", "#ff7b54", "#6b4eff", "#1f9d8b"];
+  avatarColors.forEach((color, index) => {
+    const x = sideWidth / 2;
+    const y = topHeight + sideWidth * (0.48 + index * 0.72);
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(x, y, avatarRadius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,.78)";
+    ctx.beginPath();
+    ctx.arc(x, y - avatarRadius * 0.18, avatarRadius * 0.28, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x, y + avatarRadius * 0.58, avatarRadius * 0.6, Math.PI, Math.PI * 2);
+    ctx.fill();
+  });
+
+  drawStreamImage(ctx, source, rect);
+  drawLiveBadge(ctx, rect.x + rect.width * 0.012, rect.y + rect.height * 0.022, rect.height * 0.05);
+  drawPlayerControls(ctx, rect, { accent: "#9147ff" });
+
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(sideWidth, infoY, width - sideWidth, height - infoY);
+  const infoHeight = height - infoY;
+  const channelAvatar = Math.min(infoHeight * 0.32, width * 0.033);
+  const avatarX = sideWidth + width * 0.028 + channelAvatar;
+  const avatarY = infoY + infoHeight * 0.45;
+  drawStreamAvatar(ctx, avatarX, avatarY, channelAvatar, "#9147ff", state.streamChannel);
+
+  const textX = avatarX + channelAvatar * 1.48;
+  const textMax = width * 0.48;
+  let cursorY = infoY + infoHeight * 0.18;
+  if (state.streamShowTitle && state.streamTitle.trim()) {
+    const preferred = Math.max(15, infoHeight * 0.17);
+    const size = fitCanvasFont(ctx, state.streamTitle.trim(), textMax, preferred, Math.max(12, infoHeight * 0.11), 700, "Arial, sans-serif");
+    ctx.font = `700 ${Math.round(size)}px Arial, sans-serif`;
+    ctx.fillStyle = "#18181b";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.fillText(ellipsizeCanvasText(ctx, state.streamTitle.trim(), textMax), textX, cursorY);
+    cursorY += size * 1.55;
+  }
+  if (state.streamShowChannel && state.streamChannel.trim()) {
+    ctx.fillStyle = "#772ce8";
+    ctx.font = `700 ${Math.max(12, Math.round(infoHeight * 0.13))}px Arial, sans-serif`;
+    ctx.fillText(ellipsizeCanvasText(ctx, state.streamChannel.trim(), textMax * 0.72), textX, cursorY);
+  }
+
+  const buttonH = infoHeight * 0.3;
+  fillRoundedRect(ctx, width * 0.625, infoY + infoHeight * 0.19, width * 0.085, buttonH, buttonH * 0.2, "#9147ff");
+  fillRoundedRect(ctx, width * 0.72, infoY + infoHeight * 0.19, width * 0.115, buttonH, buttonH * 0.2, "#efeff1");
+  ctx.font = `700 ${Math.max(11, Math.round(buttonH * 0.36))}px Arial, sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = "#fff";
+  ctx.fillText("팔로우", width * 0.6675, infoY + infoHeight * 0.34);
+  ctx.fillStyle = "#18181b";
+  ctx.fillText("구독하기", width * 0.7775, infoY + infoHeight * 0.34);
+
+  ctx.textAlign = "right";
+  ctx.fillStyle = "#e91916";
+  ctx.font = `700 ${Math.max(11, Math.round(infoHeight * 0.13))}px Arial, sans-serif`;
+  const metaParts = [];
+  if (state.streamShowViewers && state.streamViewers.trim()) metaParts.push(`● ${state.streamViewers.trim()}`);
+  if (state.streamShowDuration && state.streamDuration.trim()) metaParts.push(state.streamDuration.trim());
+  ctx.fillText(metaParts.join("   "), width * 0.965, infoY + infoHeight * 0.5);
+}
+
+function composeStreamFrame(canvas, maxSide) {
+  const platform = state.streamFrame;
+  if (platform === "off") return { width: canvas.width, height: canvas.height };
+  const source = snapshotCanvas(canvas);
+  const output = getStreamOutputSize(maxSide, platform);
+  canvas.width = output.width;
+  canvas.height = output.height;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  if (platform === "twitch") drawTwitchStreamFrame(ctx, output.width, output.height, source);
+  else drawYoutubeStreamFrame(ctx, output.width, output.height, source);
+  return output;
 }
 
 function renderFilmFrame(image, width, height, seed, originalOnly = false, animationPhase = 0) {
@@ -3236,6 +3735,7 @@ function drawProcessed(
   }
   const rasterFrame = getActiveRasterFrameDefinition();
   if (originalOnly) {
+    if (state.streamFrame !== "off") return composeStreamFrame(targetCanvas, maxSide);
     if (rasterFrame) return composeRasterFrame(targetCanvas, maxSide, rasterFrame);
     return finalOutput;
   }
@@ -3245,9 +3745,13 @@ function drawProcessed(
   drawStickers(finalCtx, finalOutput.width, finalOutput.height, showStickerSelection);
   if (state.showDate) addDateStamp(finalCtx, finalOutput.width, finalOutput.height);
   drawVnDialogue(finalCtx, finalOutput.width, finalOutput.height);
-  if (state.xpOverlay) composeXpDesktop(targetCanvas, finalOutput.width, finalOutput.height);
+  if (state.streamFrame !== "off") finalOutput = composeStreamFrame(targetCanvas, maxSide);
+  else if (state.xpOverlay) composeXpDesktop(targetCanvas, finalOutput.width, finalOutput.height);
   if (rasterFrame) finalOutput = composeRasterFrame(targetCanvas, maxSide, rasterFrame);
-  else drawCameraOverlay(finalCtx, finalOutput.width, finalOutput.height);
+  else {
+    const overlayCtx = targetCanvas.getContext("2d", { willReadFrequently: true });
+    drawCameraOverlay(overlayCtx, finalOutput.width, finalOutput.height);
+  }
 
   return finalOutput;
 }
@@ -3583,6 +4087,7 @@ elements.xpOverlayButtons.forEach((button) => {
     if (state.xpOverlay) {
       state.digicamFrame = "off";
       state.paintFrame = false;
+      state.streamFrame = "off";
     }
     syncCompositeOverlayButtons();
     updateOverlayUI();
@@ -3596,6 +4101,7 @@ elements.digicamFrameButtons.forEach((button) => {
     if (state.digicamFrame !== "off") {
       state.xpOverlay = false;
       state.paintFrame = false;
+      state.streamFrame = "off";
     }
     if (state.digicamFrame !== "off") {
       prepareRasterFrame(rasterFrameDefinitions[state.digicamFrame]);
@@ -3612,12 +4118,88 @@ elements.paintFrameButtons.forEach((button) => {
     if (state.paintFrame) {
       state.xpOverlay = false;
       state.digicamFrame = "off";
+      state.streamFrame = "off";
     }
     if (state.paintFrame) prepareRasterFrame(rasterFrameDefinitions.paint);
     syncCompositeOverlayButtons();
     updateOverlayUI();
     scheduleRender();
   });
+});
+
+elements.streamFrameButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    state.streamFrame = button.dataset.streamFrame;
+    if (state.streamFrame !== "off") {
+      state.xpOverlay = false;
+      state.digicamFrame = "off";
+      state.paintFrame = false;
+    }
+    syncCompositeOverlayButtons();
+    updateOverlayUI();
+    scheduleRender();
+  });
+});
+
+elements.streamThemeButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    state.streamTheme = button.dataset.streamTheme;
+    updateOverlayUI();
+    scheduleRender();
+  });
+});
+
+elements.streamFitButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    state.streamFit = button.dataset.streamFit;
+    updateOverlayUI();
+    scheduleRender();
+  });
+});
+
+[
+  [elements.streamTitle, "streamTitle"],
+  [elements.streamChannel, "streamChannel"],
+  [elements.streamViewers, "streamViewers"],
+  [elements.streamDuration, "streamDuration"],
+].forEach(([input, key]) => {
+  input.addEventListener("input", () => {
+    state[key] = input.value;
+    scheduleRender();
+  });
+});
+
+[
+  [elements.streamShowTitle, "streamShowTitle"],
+  [elements.streamShowChannel, "streamShowChannel"],
+  [elements.streamShowViewers, "streamShowViewers"],
+  [elements.streamShowDuration, "streamShowDuration"],
+].forEach(([input, key]) => {
+  input.addEventListener("change", () => {
+    state[key] = input.checked;
+    scheduleRender();
+  });
+});
+
+elements.streamZoom.addEventListener("input", () => {
+  state.streamZoom = Number(elements.streamZoom.value) / 100;
+  elements.streamZoomValue.textContent = `${elements.streamZoom.value}%`;
+  setNormalizedRangeFill(elements.streamZoom);
+  scheduleRender();
+});
+
+elements.streamPositionX.addEventListener("input", () => {
+  state.streamPositionX = Number(elements.streamPositionX.value) / 100;
+  elements.streamPositionXValue.textContent = `${elements.streamPositionX.value}%`;
+  setNormalizedRangeFill(elements.streamPositionX);
+  scheduleRender();
+});
+
+elements.streamPositionY.addEventListener("input", () => {
+  state.streamPositionY = Number(elements.streamPositionY.value) / 100;
+  elements.streamPositionYValue.textContent = `${elements.streamPositionY.value}%`;
+  setNormalizedRangeFill(elements.streamPositionY);
+  scheduleRender();
 });
 
 elements.rotateCameraLeft.addEventListener("click", () => {
@@ -3826,6 +4408,9 @@ setNormalizedRangeFill(elements.patternPhase);
 setNormalizedRangeFill(elements.filmFrameCount);
 setNormalizedRangeFill(elements.vnCharacterSize);
 setNormalizedRangeFill(elements.vnCharacterX);
+setNormalizedRangeFill(elements.streamZoom);
+setNormalizedRangeFill(elements.streamPositionX);
+setNormalizedRangeFill(elements.streamPositionY);
 updateLiquifyUI();
 updatePatternUI();
 updateOverlayUI();
