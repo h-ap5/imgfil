@@ -25,7 +25,7 @@
       type="font/woff2"
       crossorigin
     />
-    <link rel="stylesheet" href="styles.css?v=20260924-stream1" />
+    <link rel="stylesheet" href="styles.css?v=20260930-sky1" />
   </head>
   <body>
     <a class="skip-link" href="#editor">편집기로 바로가기</a>
@@ -57,11 +57,51 @@
           </div>
         </div>
 
+        <div class="menu-bar">
+          <nav class="menu-tabs" aria-label="편집 도구">
+            <button class="menu-tab is-active" type="button" data-tool="filter" aria-pressed="true" aria-controls="tool-window">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM4 15l5-5 4 4 3-3 4 4" /></svg>
+              <span>필터</span>
+            </button>
+            <button class="menu-tab" type="button" data-tool="adjust" aria-pressed="false" aria-controls="tool-window">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9m4 0h3M4 17h3m4 0h9M15 5v4M9 15v4" /></svg>
+              <span>조정</span>
+            </button>
+            <button class="menu-tab" type="button" data-tool="sticker" aria-pressed="false" aria-controls="tool-window">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20S5 15.5 5 10a3.5 3.5 0 0 1 7-1 3.5 3.5 0 0 1 7 1c0 5.5-7 10-7 10z" /></svg>
+              <span>스티커</span>
+            </button>
+            <button class="menu-tab" type="button" data-tool="text" aria-pressed="false" aria-controls="tool-window">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14M12 6v13M9 19h6" /></svg>
+              <span>글자</span>
+            </button>
+            <button class="menu-tab" type="button" data-tool="frame" aria-pressed="false" aria-controls="tool-window">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h18v16H3zM7 8h10v8H7z" /></svg>
+              <span>프레임</span>
+            </button>
+          </nav>
+          <div class="menu-actions">
+            <button id="compare-button" class="menu-action" type="button" disabled aria-pressed="false" aria-label="누르고 원본 보기">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M5 5h14v14H5z" /></svg>
+              <span class="label-long">누르고 원본 보기</span>
+              <span class="label-short" aria-hidden="true">원본</span>
+            </button>
+            <div class="segmented-control menu-format" role="group" aria-label="저장 형식">
+              <button class="is-selected" type="button" data-format="png" aria-pressed="true">PNG</button>
+              <button type="button" data-format="webp" aria-pressed="false">WEBP</button>
+            </div>
+            <button id="download-button" class="menu-save" type="button" disabled>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0 5-5m-5 5-5-5M5 19h14" /></svg>
+              PNG로 저장
+            </button>
+          </div>
+        </div>
+
         <div class="workspace">
-          <div class="preview-column">
-            <section class="preview-panel" aria-labelledby="preview-heading">
-            <div class="panel-heading">
+          <section class="stage" aria-labelledby="preview-heading">
+            <div class="stage-heading">
               <h1 id="preview-heading">PREVIEW</h1>
+              <div id="file-meta" class="file-meta" aria-live="polite">이미지 대기 중</div>
               <button id="reset-button" class="icon-button" type="button" disabled aria-label="처음부터 다시 하기">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M4 4v6h6M5.5 9A7 7 0 1 1 5 16" />
@@ -80,7 +120,7 @@
                   <div class="empty-spark spark-two">✦</div>
                 </div>
                 <h2>사진을 불러오세요</h2>
-                <p>JPG · PNG · WEBP</p>
+                <p>JPG · PNG · WEBP · 끌어다 놓거나 붙여넣기</p>
                 <button id="upload-button" class="button button-primary" type="button">
                   <svg viewBox="0 0 24 24" aria-hidden="true">
                     <path d="M12 16V4m0 0L7 9m5-5 5 5M5 14v5h14v-5" />
@@ -95,23 +135,14 @@
 
             <input id="file-input" type="file" accept="image/jpeg,image/png,image/webp" hidden />
 
-            <div class="preview-toolbar">
-              <div id="file-meta" class="file-meta" aria-live="polite">이미지 대기 중</div>
-              <button id="compare-button" class="button button-dark" type="button" disabled aria-pressed="false">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M12 3v18M5 5h14v14H5z" />
-                </svg>
-                누르고 원본 보기
-              </button>
-            </div>
-            </section>
-
-            <section class="control-section" aria-labelledby="filter-title">
-              <div class="section-title-row">
-                <h2 id="filter-title">필터</h2>
-              </div>
-
+            <div class="filter-strip">
+              <button class="strip-arrow" type="button" data-strip-scroll="-1" aria-label="이전 필터 보기">◀</button>
               <div class="filter-list" role="radiogroup" aria-label="필터 프리셋">
+                <button class="filter-card filter-card-none" type="button" role="radio" aria-checked="false" data-filter="none">
+                  <span class="filter-swatch swatch-none" aria-hidden="true"></span>
+                  <span class="filter-copy"><strong>필터 없음</strong><small>original / no filter · 틀·자막만 쓰기</small></span>
+                  <span class="filter-index">00</span>
+                </button>
                 <button class="filter-card is-active" type="button" role="radio" aria-checked="true" data-filter="softcam">
                   <span class="filter-swatch swatch-softcam" aria-hidden="true"></span>
                   <span class="filter-copy"><strong>흐릿한 아이폰</strong><small>soft / hazy / 2011</small></span>
@@ -177,9 +208,9 @@
                   <span class="filter-copy"><strong>흑백 만화</strong><small>manga / ink / screentone</small></span>
                   <span class="filter-index">13</span>
                 </button>
-                <button class="filter-card" type="button" role="radio" aria-checked="false" data-filter="holo">
-                  <span class="filter-swatch swatch-holo" aria-hidden="true"></span>
-                  <span class="filter-copy"><strong>홀로 드림</strong><small>pearl / haze / dream</small></span>
+                <button class="filter-card" type="button" role="radio" aria-checked="false" data-filter="dreamcore">
+                  <span class="filter-swatch swatch-dreamcore" aria-hidden="true"></span>
+                  <span class="filter-copy"><strong>드림코어</strong><small>dreamcore / liminal / haze</small></span>
                   <span class="filter-index">14</span>
                 </button>
                 <button class="filter-card" type="button" role="radio" aria-checked="false" data-filter="pixel">
@@ -218,347 +249,431 @@
                   <span class="filter-index">21</span>
                 </button>
               </div>
-            </section>
-          </div>
+              <button class="strip-arrow" type="button" data-strip-scroll="1" aria-label="다음 필터 보기">▶</button>
+            </div>
+          </section>
 
-          <aside class="control-panel" aria-label="편집 도구">
+          <div class="tool-dock">
+          <aside id="tool-window" class="tool-window" aria-labelledby="tool-title">
+            <div class="title-bar tool-window-bar">
+              <div class="title-path">
+                <span class="tiny-disk" aria-hidden="true"></span>
+                <span id="tool-title">필터 설정</span>
+              </div>
+              <button id="close-tool-window" class="retro-dialog-close" type="button" aria-label="속성 창 닫기">×</button>
+            </div>
+            <div class="tool-window-body">
+              <section class="tool-panel" data-tool-panel="filter" aria-label="필터 설정">
+                <p class="tool-current">선택한 필터 <strong id="current-filter-name">흐릿한 아이폰</strong></p>
+                <label class="range-control" for="strength-range">
+                  <span><strong>필터 강도</strong><output id="strength-value">72%</output></span>
+                  <input id="strength-range" type="range" min="0" max="100" value="72" />
+                </label>
 
-            <section class="control-section sticker-section" aria-labelledby="sticker-title">
-              <div class="section-title-row sticker-title-row">
-                <h2 id="sticker-title">스티커</h2>
+                <label class="range-control" for="grain-range">
+                  <span><strong>입자감 · 노이즈</strong><output id="grain-value">24%</output></span>
+                  <input id="grain-range" type="range" min="0" max="100" value="24" />
+                </label>
+
+                <div id="liquify-controls" class="liquify-controls" hidden>
+                  <fieldset class="ratio-control liquify-mode-control">
+                    <legend>용해 범위</legend>
+                    <div class="segmented-control">
+                      <button class="is-selected" type="button" data-liquify-mode="global" aria-pressed="true">전체</button>
+                      <button type="button" data-liquify-mode="brush" aria-pressed="false">브러시</button>
+                    </div>
+                  </fieldset>
+                  <div id="liquify-brush-tools" class="liquify-brush-tools" hidden>
+                    <label class="range-control" for="liquify-brush-size">
+                      <span><strong>브러시 크기</strong><output id="liquify-brush-size-value">18%</output></span>
+                      <input id="liquify-brush-size" type="range" min="6" max="34" value="18" />
+                    </label>
+                    <div class="brush-actions">
+                      <span>짧게·드래그: 파동 / 길게: 꼬임</span>
+                      <button id="undo-liquify" type="button" disabled>한 획 취소</button>
+                      <button id="clear-liquify" type="button" disabled>전부 지우기</button>
+                    </div>
+                  </div>
+                </div>
+
+                <div id="pattern-controls" class="pattern-controls" hidden>
+                  <label class="range-control" for="pattern-phase">
+                    <span><strong>패턴 위상</strong><output id="pattern-phase-value">0°</output></span>
+                    <input id="pattern-phase" type="range" min="0" max="360" value="0" />
+                  </label>
+                  <button id="randomize-pattern" class="compact-action" type="button">패턴 바꾸기</button>
+                </div>
+              </section>
+
+              <section class="tool-panel" data-tool-panel="adjust" aria-label="사진 조정" hidden>
+                <fieldset class="ratio-control">
+                  <legend>사진 비율</legend>
+                  <div class="segmented-control">
+                    <button class="is-selected" type="button" data-ratio="original" aria-pressed="true">원본</button>
+                    <button type="button" data-ratio="1:1" aria-pressed="false">1:1</button>
+                    <button type="button" data-ratio="4:5" aria-pressed="false">4:5</button>
+                  </div>
+                </fieldset>
+
+                <label class="toggle-row" for="date-toggle">
+                  <span><strong>날짜 스탬프</strong><small>사진 오른쪽 아래에 표시</small></span>
+                  <span class="switch"><input id="date-toggle" type="checkbox" /><span aria-hidden="true"></span></span>
+                </label>
+                <label class="date-input-row" for="date-input">
+                  <span>날짜</span>
+                  <input id="date-input" type="date" />
+                </label>
+              </section>
+
+              <section class="tool-panel sticker-section" data-tool-panel="sticker" aria-label="스티커" hidden>
                 <div class="sticker-actions">
                   <button id="upload-sticker" type="button" disabled>내 이미지</button>
                   <button id="random-stickers" type="button" disabled>랜덤</button>
                   <button id="clear-stickers" type="button" disabled>전체삭제</button>
                 </div>
-              </div>
+                <input id="sticker-file-input" type="file" accept="image/png,image/webp,image/jpeg,image/svg+xml" hidden />
 
-              <input id="sticker-file-input" type="file" accept="image/png,image/webp,image/jpeg,image/svg+xml" hidden />
+                <div class="sticker-tabs" role="tablist" aria-label="스티커 팩">
+                  <button class="is-selected" type="button" role="tab" aria-selected="true" data-sticker-group="holo">홀로</button>
+                  <button type="button" role="tab" aria-selected="false" data-sticker-group="y2k">Y2K</button>
+                  <button type="button" role="tab" aria-selected="false" data-sticker-group="pixel">픽셀</button>
+                  <button type="button" role="tab" aria-selected="false" data-sticker-group="custom">내꺼</button>
+                </div>
+                <div id="sticker-tray" class="sticker-tray" aria-label="스티커 목록"></div>
 
-              <div class="sticker-tabs" role="tablist" aria-label="스티커 팩">
-                <button class="is-selected" type="button" role="tab" aria-selected="true" data-sticker-group="holo">홀로</button>
-                <button type="button" role="tab" aria-selected="false" data-sticker-group="y2k">Y2K</button>
-                <button type="button" role="tab" aria-selected="false" data-sticker-group="pixel">픽셀</button>
-                <button type="button" role="tab" aria-selected="false" data-sticker-group="custom">내꺼</button>
-              </div>
-              <div id="sticker-tray" class="sticker-tray" aria-label="스티커 목록"></div>
-
-              <div id="sticker-tools" class="sticker-tools" hidden>
-                <label class="mini-range" for="sticker-size">
-                  <span>크기 <output id="sticker-size-value">100%</output></span>
-                  <input id="sticker-size" type="range" min="45" max="190" value="100" />
-                </label>
-                <label class="mini-range" for="sticker-rotation">
-                  <span>회전 <output id="sticker-rotation-value">0°</output></span>
-                  <input id="sticker-rotation" type="range" min="-180" max="180" value="0" />
-                </label>
-                <button id="delete-sticker" class="sticker-delete" type="button">선택 삭제</button>
-              </div>
-            </section>
-
-            <section class="control-section vn-section" aria-labelledby="vn-title">
-              <div class="section-title-row">
-                <h2 id="vn-title">미연시</h2>
-              </div>
-
-              <div class="vn-panel">
-                <fieldset class="ratio-control vn-mode-control">
-                  <legend>구성</legend>
-                  <div class="segmented-control three-segment-control">
-                    <button class="is-selected" type="button" data-vn-mode="off" aria-pressed="true">끔</button>
-                    <button type="button" data-vn-mode="dialogue" aria-pressed="false">대화창</button>
-                    <button type="button" data-vn-mode="scene" aria-pressed="false">장면 합성</button>
-                  </div>
-                </fieldset>
-
-                <div id="vn-tools" class="vn-tools" hidden>
-                  <label class="text-control" for="vn-name">
-                    <span>이름</span>
-                    <input id="vn-name" type="text" maxlength="24" value="이름" />
+                <div id="sticker-tools" class="sticker-tools" hidden>
+                  <label class="mini-range" for="sticker-size">
+                    <span>크기 <output id="sticker-size-value">100%</output></span>
+                    <input id="sticker-size" type="range" min="45" max="190" value="100" />
                   </label>
-                  <label class="text-control" for="vn-dialogue">
-                    <span>대사</span>
-                    <textarea id="vn-dialogue" rows="3" maxlength="220">대사를 입력하세요.</textarea>
+                  <label class="mini-range" for="sticker-rotation">
+                    <span>회전 <output id="sticker-rotation-value">0°</output></span>
+                    <input id="sticker-rotation" type="range" min="-180" max="180" value="0" />
                   </label>
+                  <button id="delete-sticker" class="sticker-delete" type="button">선택 삭제</button>
+                </div>
+              </section>
 
-                  <fieldset class="ratio-control vn-style-control">
-                    <legend>대화창 디자인</legend>
+              <section class="tool-panel text-panel" data-tool-panel="text" aria-label="글자" hidden>
+                <h2 class="tool-subtitle">미연시</h2>
+                <div class="vn-panel">
+                  <fieldset class="ratio-control vn-mode-control">
+                    <legend>구성</legend>
                     <div class="segmented-control three-segment-control">
-                      <button class="is-selected" type="button" data-vn-style="classic" aria-pressed="true">클래식</button>
-                      <button type="button" data-vn-style="pink" aria-pressed="false">핑크</button>
-                      <button type="button" data-vn-style="cyber" aria-pressed="false">사이버</button>
+                      <button class="is-selected" type="button" data-vn-mode="off" aria-pressed="true">끔</button>
+                      <button type="button" data-vn-mode="dialogue" aria-pressed="false">대화창</button>
+                      <button type="button" data-vn-mode="scene" aria-pressed="false">장면 합성</button>
                     </div>
                   </fieldset>
 
-                  <fieldset class="ratio-control vn-color-control">
-                    <legend>대화창 색상</legend>
-                    <div class="vn-color-grid">
-                      <label for="vn-box-color">
-                        <span>말풍선</span>
-                        <input id="vn-box-color" type="color" value="#111634" />
-                      </label>
-                      <label for="vn-name-color">
-                        <span>이름표</span>
-                        <input id="vn-name-color" type="color" value="#8fb5ff" />
-                      </label>
-                    </div>
-                    <button id="reset-vn-colors" class="compact-action vn-color-reset" type="button" disabled>디자인 기본색</button>
-                  </fieldset>
-
-                  <fieldset class="ratio-control vn-font-control">
-                    <legend>대사 글꼴</legend>
-                    <div class="segmented-control two-segment-control">
-                      <button class="is-selected" type="button" data-vn-font="pixel" aria-pressed="true">Mona12</button>
-                      <button type="button" data-vn-font="serif" aria-pressed="false">명조</button>
-                    </div>
-                  </fieldset>
-
-                  <div id="vn-scene-tools" class="vn-scene-tools" hidden>
-                    <input id="vn-background-input" type="file" accept="image/jpeg,image/png,image/webp" hidden />
-                    <input id="vn-character-input" type="file" accept="image/png,image/webp" hidden />
-                    <div class="vn-upload-grid">
-                      <button id="upload-vn-background" class="compact-action" type="button" disabled>배경 이미지</button>
-                      <button id="upload-vn-character" class="compact-action" type="button" disabled>누끼 캐릭터</button>
-                    </div>
-                    <div class="vn-asset-status">
-                      <span id="vn-background-status">기본 사진을 배경으로 사용</span>
-                      <span id="vn-character-status">캐릭터 없음</span>
-                    </div>
-                    <label class="range-control" for="vn-character-size">
-                      <span><strong>캐릭터 크기</strong><output id="vn-character-size-value">78%</output></span>
-                      <input id="vn-character-size" type="range" min="35" max="125" value="78" />
+                  <div id="vn-tools" class="vn-tools" hidden>
+                    <label class="text-control" for="vn-name">
+                      <span>이름</span>
+                      <input id="vn-name" type="text" maxlength="24" value="이름" />
                     </label>
-                    <label class="range-control" for="vn-character-x">
-                      <span><strong>캐릭터 위치</strong><output id="vn-character-x-value">68%</output></span>
-                      <input id="vn-character-x" type="range" min="10" max="90" value="68" />
+                    <label class="text-control" for="vn-dialogue">
+                      <span>대사</span>
+                      <textarea id="vn-dialogue" rows="3" maxlength="220">대사를 입력하세요.</textarea>
                     </label>
-                    <button id="clear-vn-assets" class="compact-action vn-clear-assets" type="button" disabled>장면 이미지 비우기</button>
+
+                    <fieldset class="ratio-control vn-style-control">
+                      <legend>대화창 디자인</legend>
+                      <div class="segmented-control three-segment-control">
+                        <button class="is-selected" type="button" data-vn-style="classic" aria-pressed="true">클래식</button>
+                        <button type="button" data-vn-style="pink" aria-pressed="false">핑크</button>
+                        <button type="button" data-vn-style="cyber" aria-pressed="false">사이버</button>
+                      </div>
+                    </fieldset>
+
+                    <fieldset class="ratio-control vn-color-control">
+                      <legend>대화창 색상</legend>
+                      <div class="vn-color-grid">
+                        <label for="vn-box-color">
+                          <span>말풍선</span>
+                          <input id="vn-box-color" type="color" value="#111634" />
+                        </label>
+                        <label for="vn-name-color">
+                          <span>이름표</span>
+                          <input id="vn-name-color" type="color" value="#8fb5ff" />
+                        </label>
+                      </div>
+                      <button id="reset-vn-colors" class="compact-action vn-color-reset" type="button" disabled>디자인 기본색</button>
+                    </fieldset>
+
+                    <fieldset class="ratio-control vn-font-control">
+                      <legend>대사 글꼴</legend>
+                      <div class="segmented-control two-segment-control">
+                        <button class="is-selected" type="button" data-vn-font="pixel" aria-pressed="true">Mona12</button>
+                        <button type="button" data-vn-font="serif" aria-pressed="false">명조</button>
+                      </div>
+                    </fieldset>
+
+                    <div id="vn-scene-tools" class="vn-scene-tools" hidden>
+                      <input id="vn-background-input" type="file" accept="image/jpeg,image/png,image/webp" hidden />
+                      <input id="vn-character-input" type="file" accept="image/png,image/webp" hidden />
+                      <div class="vn-upload-grid">
+                        <button id="upload-vn-background" class="compact-action" type="button" disabled>배경 이미지</button>
+                        <button id="upload-vn-character" class="compact-action" type="button" disabled>누끼 캐릭터</button>
+                      </div>
+                      <div class="vn-asset-status">
+                        <span id="vn-background-status">기본 사진을 배경으로 사용</span>
+                        <span id="vn-character-status">캐릭터 없음</span>
+                      </div>
+                      <label class="range-control" for="vn-character-size">
+                        <span><strong>캐릭터 크기</strong><output id="vn-character-size-value">78%</output></span>
+                        <input id="vn-character-size" type="range" min="35" max="125" value="78" />
+                      </label>
+                      <label class="range-control" for="vn-character-x">
+                        <span><strong>캐릭터 위치</strong><output id="vn-character-x-value">68%</output></span>
+                        <input id="vn-character-x" type="range" min="10" max="90" value="68" />
+                      </label>
+                      <button id="clear-vn-assets" class="compact-action vn-clear-assets" type="button" disabled>장면 이미지 비우기</button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </section>
+                <h2 class="tool-subtitle">영화 자막</h2>
+                              <div class="movie-panel">
+                                <fieldset class="ratio-control movie-mode-control">
+                                  <legend>영화 프레임</legend>
+                                  <div class="segmented-control two-segment-control">
+                                    <button class="is-selected" type="button" data-movie-frame="off" aria-pressed="true">끔</button>
+                                    <button type="button" data-movie-frame="on" aria-pressed="false">켬</button>
+                                  </div>
+                                </fieldset>
 
-            <section class="control-section settings-section" aria-labelledby="settings-title">
-              <h2 id="settings-title">조정</h2>
+                                <div id="movie-tools" class="movie-tools" hidden>
+                                  <label class="text-control" for="movie-subtitle">
+                                    <span>자막 <small>엔터로 줄 나누기</small></span>
+                                    <textarea id="movie-subtitle" rows="3" maxlength="200">- 여기에 원하는 대사를 적어 주세요
+- 줄을 바꾸면 자막도 두 줄이 돼요</textarea>
+                                  </label>
 
-              <label class="range-control" for="strength-range">
-                <span><strong>필터 강도</strong><output id="strength-value">72%</output></span>
-                <input id="strength-range" type="range" min="0" max="100" value="72" />
-              </label>
+                                  <fieldset class="ratio-control movie-font-control" aria-labelledby="movie-font-legend">
+                                    <legend>
+                                      <span id="movie-font-legend">자막 글꼴</span>
+                                      <button
+                                        id="movie-font-info"
+                                        class="info-button"
+                                        type="button"
+                                        aria-haspopup="dialog"
+                                        aria-controls="dx-font-dialog"
+                                        aria-label="DX영화자막 설치 안내"
+                                      >i</button>
+                                    </legend>
+                                    <div class="segmented-control three-segment-control">
+                                      <button class="movie-font-hyemin is-selected" type="button" data-movie-font="hyemin" aria-pressed="true">IM혜민체</button>
+                                      <button class="movie-font-chosun" type="button" data-movie-font="chosun" aria-pressed="false">조선굴림</button>
+                                      <button class="movie-font-dx" type="button" data-movie-font="dx" aria-pressed="false">DX영화자막</button>
+                                    </div>
+                                  </fieldset>
 
-              <label class="range-control" for="grain-range">
-                <span><strong>입자감 · 노이즈</strong><output id="grain-value">24%</output></span>
-                <input id="grain-range" type="range" min="0" max="100" value="24" />
-              </label>
+                                  <div class="movie-color-row">
+                                    <label for="movie-text-color">
+                                      <span>자막 색</span>
+                                      <input id="movie-text-color" type="color" value="#f1df6c" />
+                                    </label>
+                                    <button class="compact-action" type="button" data-movie-color="#f1df6c" aria-pressed="true">노랑</button>
+                                    <button class="compact-action" type="button" data-movie-color="#ffffff" aria-pressed="false">흰색</button>
+                                  </div>
 
-              <div id="liquify-controls" class="liquify-controls" hidden>
-                <fieldset class="ratio-control liquify-mode-control">
-                  <legend>용해 범위</legend>
-                  <div class="segmented-control">
-                    <button class="is-selected" type="button" data-liquify-mode="global" aria-pressed="true">전체</button>
-                    <button type="button" data-liquify-mode="brush" aria-pressed="false">브러시</button>
+                                  <label class="range-control" for="movie-text-size">
+                                    <span><strong>글자 크기</strong><output id="movie-text-size-value">100%</output></span>
+                                    <input id="movie-text-size" type="range" min="60" max="160" value="100" />
+                                  </label>
+                                  <label class="range-control" for="movie-bar-size">
+                                    <span><strong>검은 띠 두께</strong><output id="movie-bar-size-value">8%</output></span>
+                                    <input id="movie-bar-size" type="range" min="0" max="20" value="8" />
+                                  </label>
+
+                                  <fieldset class="ratio-control movie-position-control">
+                                    <legend>자막 위치</legend>
+                                    <div class="segmented-control two-segment-control">
+                                      <button class="is-selected" type="button" data-movie-position="picture" aria-pressed="true">화면 안</button>
+                                      <button type="button" data-movie-position="bar" aria-pressed="false">아래 검은 띠</button>
+                                    </div>
+                                  </fieldset>
+                                </div>
+                              </div>
+              </section>
+
+              <section class="tool-panel overlay-section" data-tool-panel="frame" aria-label="프레임과 오버레이" hidden>
+                <fieldset class="ratio-control overlay-control">
+                  <legend>카메라 화면</legend>
+                  <div class="segmented-control overlay-language-control">
+                    <button class="is-selected" type="button" data-camera-overlay="off" aria-pressed="true">끔</button>
+                    <button type="button" data-camera-overlay="ko" aria-pressed="false">한국어</button>
+                    <button type="button" data-camera-overlay="en" aria-pressed="false">EN</button>
+                    <button type="button" data-camera-overlay="digicam" aria-pressed="false">디카</button>
+                  </div>
+                  <div class="camera-rotation-actions">
+                    <button id="rotate-camera-left" class="compact-action" type="button" disabled>↶ 90°</button>
+                    <output id="camera-rotation-value">0°</output>
+                    <button id="rotate-camera-right" class="compact-action" type="button" disabled>90° ↷</button>
                   </div>
                 </fieldset>
-                <div id="liquify-brush-tools" class="liquify-brush-tools" hidden>
-                  <label class="range-control" for="liquify-brush-size">
-                    <span><strong>브러시 크기</strong><output id="liquify-brush-size-value">18%</output></span>
-                    <input id="liquify-brush-size" type="range" min="6" max="34" value="18" />
-                  </label>
-                  <div class="brush-actions">
-                    <span>짧게·드래그: 파동 / 길게: 꼬임</span>
-                    <button id="undo-liquify" type="button" disabled>한 획 취소</button>
-                    <button id="clear-liquify" type="button" disabled>전부 지우기</button>
+
+                <fieldset class="ratio-control overlay-control">
+                  <legend>디카 프레임</legend>
+                  <div class="segmented-control three-segment-control">
+                    <button class="is-selected" type="button" data-digicam-frame="off" aria-pressed="true">끔</button>
+                    <button type="button" data-digicam-frame="horizontal" aria-pressed="false">가로</button>
+                    <button type="button" data-digicam-frame="portrait" aria-pressed="false">세로</button>
                   </div>
-                </div>
-              </div>
+                </fieldset>
 
-              <div id="pattern-controls" class="pattern-controls" hidden>
-                <label class="range-control" for="pattern-phase">
-                  <span><strong>패턴 위상</strong><output id="pattern-phase-value">0°</output></span>
-                  <input id="pattern-phase" type="range" min="0" max="360" value="0" />
-                </label>
-                <button id="randomize-pattern" class="compact-action" type="button">패턴 바꾸기</button>
-              </div>
+                <fieldset class="ratio-control overlay-control">
+                  <legend>그림판 프레임</legend>
+                  <div class="segmented-control two-segment-control">
+                    <button class="is-selected" type="button" data-paint-frame="off" aria-pressed="true">끔</button>
+                    <button type="button" data-paint-frame="on" aria-pressed="false">켬</button>
+                  </div>
+                </fieldset>
 
-              <fieldset class="ratio-control">
-                <legend>사진 비율</legend>
-                <div class="segmented-control">
-                  <button class="is-selected" type="button" data-ratio="original" aria-pressed="true">원본</button>
-                  <button type="button" data-ratio="1:1" aria-pressed="false">1:1</button>
-                  <button type="button" data-ratio="4:5" aria-pressed="false">4:5</button>
-                </div>
-              </fieldset>
+                <fieldset class="ratio-control overlay-control">
+                  <legend>XP 데스크톱</legend>
+                  <div class="segmented-control two-segment-control">
+                    <button class="is-selected" type="button" data-xp-overlay="off" aria-pressed="true">끔</button>
+                    <button type="button" data-xp-overlay="on" aria-pressed="false">켬</button>
+                  </div>
+                </fieldset>
 
-              <label class="toggle-row" for="date-toggle">
-                <span><strong>날짜 스탬프</strong><small>사진 오른쪽 아래에 표시</small></span>
-                <span class="switch"><input id="date-toggle" type="checkbox" /><span aria-hidden="true"></span></span>
-              </label>
-              <label class="date-input-row" for="date-input">
-                <span>날짜</span>
-                <input id="date-input" type="date" />
-              </label>
-            </section>
+                <fieldset class="ratio-control overlay-control stream-overlay-control">
+                  <legend>스트리밍 화면</legend>
+                  <div class="segmented-control three-segment-control">
+                    <button class="is-selected" type="button" data-stream-frame="off" aria-pressed="true">끔</button>
+                    <button type="button" data-stream-frame="youtube" aria-pressed="false">YouTube</button>
+                    <button type="button" data-stream-frame="twitch" aria-pressed="false">Twitch</button>
+                  </div>
 
-            <section class="control-section overlay-section" aria-labelledby="overlay-title">
-              <h2 id="overlay-title">오버레이</h2>
+                  <div id="stream-tools" class="stream-tools" hidden>
+                    <fieldset id="stream-theme-control" class="ratio-control stream-theme-control">
+                      <legend>YouTube 테마</legend>
+                      <div class="segmented-control two-segment-control">
+                        <button class="is-selected" type="button" data-stream-theme="dark" aria-pressed="true">어둡게</button>
+                        <button type="button" data-stream-theme="light" aria-pressed="false">밝게</button>
+                      </div>
+                    </fieldset>
 
-              <fieldset class="ratio-control overlay-control">
-                <legend>카메라 화면</legend>
-                <div class="segmented-control overlay-language-control">
-                  <button class="is-selected" type="button" data-camera-overlay="off" aria-pressed="true">끔</button>
-                  <button type="button" data-camera-overlay="ko" aria-pressed="false">한국어</button>
-                  <button type="button" data-camera-overlay="en" aria-pressed="false">EN</button>
-                  <button type="button" data-camera-overlay="digicam" aria-pressed="false">디카</button>
-                </div>
-                <div class="camera-rotation-actions">
-                  <button id="rotate-camera-left" class="compact-action" type="button" disabled>↶ 90°</button>
-                  <output id="camera-rotation-value">0°</output>
-                  <button id="rotate-camera-right" class="compact-action" type="button" disabled>90° ↷</button>
-                </div>
-              </fieldset>
-
-              <fieldset class="ratio-control overlay-control">
-                <legend>디카 프레임</legend>
-                <div class="segmented-control three-segment-control">
-                  <button class="is-selected" type="button" data-digicam-frame="off" aria-pressed="true">끔</button>
-                  <button type="button" data-digicam-frame="horizontal" aria-pressed="false">가로</button>
-                  <button type="button" data-digicam-frame="portrait" aria-pressed="false">세로</button>
-                </div>
-              </fieldset>
-
-              <fieldset class="ratio-control overlay-control">
-                <legend>그림판 프레임</legend>
-                <div class="segmented-control two-segment-control">
-                  <button class="is-selected" type="button" data-paint-frame="off" aria-pressed="true">끔</button>
-                  <button type="button" data-paint-frame="on" aria-pressed="false">켬</button>
-                </div>
-              </fieldset>
-
-              <fieldset class="ratio-control overlay-control">
-                <legend>XP 데스크톱</legend>
-                <div class="segmented-control two-segment-control">
-                  <button class="is-selected" type="button" data-xp-overlay="off" aria-pressed="true">끔</button>
-                  <button type="button" data-xp-overlay="on" aria-pressed="false">켬</button>
-                </div>
-              </fieldset>
-
-              <fieldset class="ratio-control overlay-control stream-overlay-control">
-                <legend>스트리밍 화면</legend>
-                <div class="segmented-control three-segment-control">
-                  <button class="is-selected" type="button" data-stream-frame="off" aria-pressed="true">끔</button>
-                  <button type="button" data-stream-frame="youtube" aria-pressed="false">YouTube</button>
-                  <button type="button" data-stream-frame="twitch" aria-pressed="false">Twitch</button>
-                </div>
-
-                <div id="stream-tools" class="stream-tools" hidden>
-                  <fieldset id="stream-theme-control" class="ratio-control stream-theme-control">
-                    <legend>YouTube 테마</legend>
-                    <div class="segmented-control two-segment-control">
-                      <button class="is-selected" type="button" data-stream-theme="dark" aria-pressed="true">어둡게</button>
-                      <button type="button" data-stream-theme="light" aria-pressed="false">밝게</button>
-                    </div>
-                  </fieldset>
-
-                  <label class="text-control" for="stream-title">
-                    <span>방송 제목</span>
-                    <input id="stream-title" type="text" maxlength="90" value="방송제목을 입력해주세요" />
-                  </label>
-                  <label class="text-control" for="stream-channel">
-                    <span>채널명</span>
-                    <input id="stream-channel" type="text" maxlength="36" value="채널 이름" />
-                  </label>
-                  <div class="stream-meta-grid">
-                    <label class="text-control" for="stream-viewers">
-                      <span>시청자 수</span>
-                      <input id="stream-viewers" type="text" maxlength="16" value="1,458" />
+                    <label class="text-control" for="stream-title">
+                      <span>방송 제목</span>
+                      <input id="stream-title" type="text" maxlength="90" value="방송제목을 입력해주세요" />
                     </label>
-                    <label class="text-control" for="stream-duration">
-                      <span>방송 시간</span>
-                      <input id="stream-duration" type="text" maxlength="12" value="2:26:16" />
+                    <label class="text-control" for="stream-channel">
+                      <span>채널명</span>
+                      <input id="stream-channel" type="text" maxlength="36" value="채널 이름" />
+                    </label>
+                    <div class="stream-meta-grid">
+                      <label class="text-control" for="stream-viewers">
+                        <span>시청자 수</span>
+                        <input id="stream-viewers" type="text" maxlength="16" value="1,458" />
+                      </label>
+                      <label class="text-control" for="stream-duration">
+                        <span>방송 시간</span>
+                        <input id="stream-duration" type="text" maxlength="12" value="2:26:16" />
+                      </label>
+                    </div>
+
+                    <div class="stream-visibility-grid" aria-label="방송 정보 표시">
+                      <label><input id="stream-show-title" type="checkbox" checked /> 제목</label>
+                      <label><input id="stream-show-channel" type="checkbox" checked /> 채널</label>
+                      <label><input id="stream-show-viewers" type="checkbox" checked /> 시청자</label>
+                      <label><input id="stream-show-duration" type="checkbox" checked /> 시간</label>
+                    </div>
+
+                    <fieldset class="ratio-control stream-fit-control">
+                      <legend>사진 맞춤</legend>
+                      <div class="segmented-control two-segment-control">
+                        <button class="is-selected" type="button" data-stream-fit="cover" aria-pressed="true">화면 채우기</button>
+                        <button type="button" data-stream-fit="contain" aria-pressed="false">전체 보기</button>
+                      </div>
+                    </fieldset>
+                    <label class="range-control" for="stream-zoom">
+                      <span><strong>사진 크기</strong><output id="stream-zoom-value">100%</output></span>
+                      <input id="stream-zoom" type="range" min="100" max="220" value="100" />
+                    </label>
+                    <label class="range-control" for="stream-position-x">
+                      <span><strong>가로 위치</strong><output id="stream-position-x-value">50%</output></span>
+                      <input id="stream-position-x" type="range" min="0" max="100" value="50" />
+                    </label>
+                    <label class="range-control" for="stream-position-y">
+                      <span><strong>세로 위치</strong><output id="stream-position-y-value">50%</output></span>
+                      <input id="stream-position-y" type="range" min="0" max="100" value="50" />
                     </label>
                   </div>
+                </fieldset>
 
-                  <div class="stream-visibility-grid" aria-label="방송 정보 표시">
-                    <label><input id="stream-show-title" type="checkbox" checked /> 제목</label>
-                    <label><input id="stream-show-channel" type="checkbox" checked /> 채널</label>
-                    <label><input id="stream-show-viewers" type="checkbox" checked /> 시청자</label>
-                    <label><input id="stream-show-duration" type="checkbox" checked /> 시간</label>
+                <fieldset class="ratio-control overlay-control">
+                  <legend>빈티지 필름 스트립</legend>
+                  <div class="segmented-control two-segment-control">
+                    <button class="is-selected" type="button" data-film-strip="off" aria-pressed="true">끔</button>
+                    <button type="button" data-film-strip="on" aria-pressed="false">켬</button>
                   </div>
-
-                  <fieldset class="ratio-control stream-fit-control">
-                    <legend>사진 맞춤</legend>
-                    <div class="segmented-control two-segment-control">
-                      <button class="is-selected" type="button" data-stream-fit="cover" aria-pressed="true">화면 채우기</button>
-                      <button type="button" data-stream-fit="contain" aria-pressed="false">전체 보기</button>
+                  <div id="film-strip-tools" class="film-strip-tools" hidden>
+                    <label class="range-control" for="film-frame-count">
+                      <span><strong>칸 수</strong><output id="film-frame-count-value">2칸</output></span>
+                      <input id="film-frame-count" type="range" min="2" max="6" value="2" />
+                    </label>
+                    <input id="film-frame-input" type="file" accept="image/jpeg,image/png,image/webp" multiple hidden />
+                    <input id="film-slot-input" type="file" accept="image/jpeg,image/png,image/webp" hidden />
+                    <div class="film-frame-actions">
+                      <button id="upload-film-frames" class="compact-action" type="button" disabled>칸별 사진</button>
+                      <button id="clear-film-frames" class="compact-action" type="button" disabled>비우기</button>
                     </div>
-                  </fieldset>
-                  <label class="range-control" for="stream-zoom">
-                    <span><strong>사진 크기</strong><output id="stream-zoom-value">100%</output></span>
-                    <input id="stream-zoom" type="range" min="100" max="220" value="100" />
-                  </label>
-                  <label class="range-control" for="stream-position-x">
-                    <span><strong>가로 위치</strong><output id="stream-position-x-value">50%</output></span>
-                    <input id="stream-position-x" type="range" min="0" max="100" value="50" />
-                  </label>
-                  <label class="range-control" for="stream-position-y">
-                    <span><strong>세로 위치</strong><output id="stream-position-y-value">50%</output></span>
-                    <input id="stream-position-y" type="range" min="0" max="100" value="50" />
-                  </label>
-                </div>
-              </fieldset>
-
-              <fieldset class="ratio-control overlay-control">
-                <legend>빈티지 필름 스트립</legend>
-                <div class="segmented-control two-segment-control">
-                  <button class="is-selected" type="button" data-film-strip="off" aria-pressed="true">끔</button>
-                  <button type="button" data-film-strip="on" aria-pressed="false">켬</button>
-                </div>
-                <div id="film-strip-tools" class="film-strip-tools" hidden>
-                  <label class="range-control" for="film-frame-count">
-                    <span><strong>칸 수</strong><output id="film-frame-count-value">2칸</output></span>
-                    <input id="film-frame-count" type="range" min="2" max="6" value="2" />
-                  </label>
-                  <input id="film-frame-input" type="file" accept="image/jpeg,image/png,image/webp" multiple hidden />
-                  <input id="film-slot-input" type="file" accept="image/jpeg,image/png,image/webp" hidden />
-                  <div class="film-frame-actions">
-                    <button id="upload-film-frames" class="compact-action" type="button" disabled>칸별 사진</button>
-                    <button id="clear-film-frames" class="compact-action" type="button" disabled>비우기</button>
+                    <p id="film-frame-status">현재 사진 반복</p>
+                    <div id="film-slot-list" class="film-slot-list" aria-label="필름 칸 순서"></div>
                   </div>
-                  <p id="film-frame-status">현재 사진 반복</p>
-                  <div id="film-slot-list" class="film-slot-list" aria-label="필름 칸 순서"></div>
-                </div>
-              </fieldset>
-            </section>
-
-            <fieldset class="export-format-control">
-              <legend>저장 형식</legend>
-              <div class="segmented-control">
-                <button class="is-selected" type="button" data-format="png" aria-pressed="true">PNG</button>
-                <button type="button" data-format="webp" aria-pressed="false">WEBP</button>
-              </div>
-            </fieldset>
-
-            <button id="download-button" class="button button-download" type="button" disabled>
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M12 4v11m0 0 5-5m-5 5-5-5M5 19h14" />
-              </svg>
-              PNG로 저장하기
-            </button>
-            <p class="local-note">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 10V8a6 6 0 0 1 12 0v2M5 10h14v10H5z" /></svg>
-              모든 편집은 이 브라우저 안에서만 처리됩니다.
-            </p>
+                </fieldset>
+              </section>
+            </div>
           </aside>
+          </div>
         </div>
 
-        <div class="status-bar" aria-hidden="true">
-          <span id="status-size">0 × 0 PX</span>
+        <div class="status-bar">
+          <span class="status-note">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 10V8a6 6 0 0 1 12 0v2M5 10h14v10H5z" /></svg>
+            모든 편집은 이 브라우저 안에서만 처리돼요
+          </span>
+          <span id="status-size" aria-hidden="true">0 × 0 PX</span>
         </div>
       </main>
     </div>
 
+    <dialog id="dx-font-dialog" class="retro-dialog" aria-labelledby="dx-font-dialog-title">
+      <div class="title-bar">
+        <div class="title-path">
+          <span class="tiny-disk" aria-hidden="true"></span>
+          <span id="dx-font-dialog-title">DX영화자막 설치 안내</span>
+        </div>
+        <button id="close-dx-font-dialog" class="retro-dialog-close" type="button" aria-label="닫기">×</button>
+      </div>
+      <div class="retro-dialog-body">
+        <p id="dx-font-state" class="dx-font-state" aria-live="polite"></p>
+        <p class="retro-dialog-note">재배포 금지 글꼴이라 사이트에 넣지 않았어요. 개인·비상업 용도는 무료예요.</p>
+        <ol class="dx-font-steps">
+          <li>
+            <span><a
+              href="https://www.dxkorea.co.kr/main/html.php?htmid=service/freefont.html"
+              target="_blank"
+              rel="noopener noreferrer"
+            >DX 공식 무료폰트 페이지 ↗</a>에서 받기</span>
+          </li>
+          <li><span>받은 글꼴 파일을 더블클릭해서 설치</span></li>
+          <li><span>브라우저를 껐다 켜면 자동으로 적용</span></li>
+        </ol>
+        <div class="dx-font-file">
+          <p>설치가 어렵다면 이 브라우저에만 불러오기</p>
+          <input id="movie-font-input" type="file" accept=".ttf,.otf,.woff,.woff2" hidden />
+          <div class="movie-font-actions">
+            <button id="load-movie-font" class="compact-action" type="button">글꼴 파일 불러오기</button>
+            <button id="clear-movie-font" class="compact-action" type="button" hidden>지우기</button>
+          </div>
+        </div>
+      </div>
+    </dialog>
+
     <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
-    <script src="stickers.js?v=20260924-stream1"></script>
-    <script src="app.js?v=20260924-stream1"></script>
+    <script src="stickers.js?v=20260930-sky1"></script>
+    <script src="app.js?v=20260930-sky1"></script>
   </body>
 </html>

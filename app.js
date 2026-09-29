@@ -105,6 +105,32 @@ const elements = {
   vnCharacterX: $("#vn-character-x"),
   vnCharacterXValue: $("#vn-character-x-value"),
   clearVnAssets: $("#clear-vn-assets"),
+  movieFrameButtons: $$('[data-movie-frame]'),
+  movieTools: $("#movie-tools"),
+  movieSubtitle: $("#movie-subtitle"),
+  movieFontButtons: $$('[data-movie-font]'),
+  movieFontInfo: $("#movie-font-info"),
+  dxFontDialog: $("#dx-font-dialog"),
+  closeDxFontDialog: $("#close-dx-font-dialog"),
+  dxFontState: $("#dx-font-state"),
+  movieFontInput: $("#movie-font-input"),
+  loadMovieFont: $("#load-movie-font"),
+  clearMovieFont: $("#clear-movie-font"),
+  movieTextColor: $("#movie-text-color"),
+  movieColorButtons: $$('[data-movie-color]'),
+  movieTextSize: $("#movie-text-size"),
+  movieTextSizeValue: $("#movie-text-size-value"),
+  movieBarSize: $("#movie-bar-size"),
+  movieBarSizeValue: $("#movie-bar-size-value"),
+  moviePositionButtons: $$('[data-movie-position]'),
+  workspace: $(".workspace"),
+  menuTabs: $$('[data-tool]'),
+  toolTitle: $("#tool-title"),
+  toolPanels: $$('[data-tool-panel]'),
+  closeToolWindow: $("#close-tool-window"),
+  filterList: $(".filter-list"),
+  stripButtons: $$('[data-strip-scroll]'),
+  currentFilterName: $("#current-filter-name"),
 };
 
 const state = {
@@ -166,10 +192,20 @@ const state = {
   vnCharacter: null,
   vnCharacterScale: 0.78,
   vnCharacterX: 0.68,
+  movieFrame: false,
+  movieSubtitle: "- 여기에 원하는 대사를 적어 주세요\n- 줄을 바꾸면 자막도 두 줄이 돼요",
+  movieFont: "hyemin",
+  movieTextColor: "#f1df6c",
+  movieTextScale: 1,
+  movieBarSize: 0.08,
+  moviePosition: "picture",
+  activeTool: "filter",
+  // phones start with the tool sheet closed so the photo stays in view
+  toolWindowOpen: !window.matchMedia("(max-width: 680px)").matches,
 };
 
 const stickerCatalog = window.STICKER_CATALOG || [];
-const assetVersion = "20260924-stream1";
+const assetVersion = "20260930-sky1";
 const customStickerCatalog = [];
 const stickerDefinitions = new Map(stickerCatalog.map((sticker) => [sticker.id, sticker]));
 const stickerAssets = new Map();
@@ -227,6 +263,7 @@ function loadRasterFrameAsset(definition, retry = false) {
 Object.values(rasterFrameDefinitions).forEach((definition) => loadRasterFrameAsset(definition));
 
 const filterNames = {
+  none: "필터 없음",
   softcam: "흐릿한 아이폰",
   y2k: "Y2K 앰버",
   analog: "아날로그 TV",
@@ -240,7 +277,7 @@ const filterNames = {
   xerox: "복사기 레이브",
   riso: "리소 어긋남",
   comic: "흑백 만화",
-  holo: "홀로 드림",
+  dreamcore: "드림코어",
   pixel: "픽셀 블록",
   summerfilm: "청량 필름",
   faded: "빛바랜 기억",
@@ -276,6 +313,261 @@ const vnThemes = {
     shadow: "rgba(0,237,255,.26)",
   },
 };
+
+// Web fonts that allow server/web embedding. IM혜민체 is the closest free match for DX영화자막
+// in weight and shape, so it is the subtitle default and the stand-in when DX is missing.
+// Pretendard (OFL, KS X 1001 subset) stands in for Apple's UI font on the iPhone camera screen.
+const cdnFonts = {
+  hyemin: {
+    label: "IM혜민체",
+    family: "Filter2000 IM Hyemin",
+    source: 'url("https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_2106@1.1/IM_Hyemin-Regular.woff2") format("woff2")',
+  },
+  chosun: {
+    label: "조선굴림",
+    family: "Filter2000 JoseonGulim",
+    source: 'url("https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_20-04@1.0/ChosunGu.woff") format("woff")',
+  },
+  pretendard: {
+    label: "Pretendard",
+    family: "Filter2000 Pretendard",
+    source: 'url("https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/static/woff2-subset/Pretendard-SemiBold.subset.woff2") format("woff2")',
+    quiet: true,
+  },
+};
+const dxFontFamilies = {
+  file: "Filter2000 DX File",
+  local: "Filter2000 DX Local",
+};
+// DX영화자막 may not be redistributed, so the site never ships it: it uses a copy
+// installed on this PC, or a file the user picks that stays in this browser's IndexedDB.
+const dxLocalFontSources = [
+  "DX영화자막 M",
+  "DXMSubtitlesM-KSCpc-EUC-H",
+  "DX영화자막 Medium",
+  "DX영화자막 Std Medium",
+  "DX영화자막",
+].map((name) => `local("${name}")`).join(", ");
+const movieFontFallback = '"Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif';
+const movieFontChoiceKey = "filter2000:movie-font";
+const movieFonts = {
+  hyemin: "idle",
+  chosun: "idle",
+  pretendard: "idle",
+  dx: "idle",
+  dxCheck: null,
+  dxFileFace: null,
+  dxFileName: "",
+  dxLocalFace: null,
+  dxSaved: false,
+  dxNotice: "",
+};
+
+function readSavedMovieFont() {
+  try {
+    const saved = localStorage.getItem(movieFontChoiceKey);
+    return ["hyemin", "chosun", "dx"].includes(saved) ? saved : "hyemin";
+  } catch {
+    return "hyemin";
+  }
+}
+
+function saveMovieFontChoice() {
+  try {
+    localStorage.setItem(movieFontChoiceKey, state.movieFont);
+  } catch {
+    // Storage can be blocked in private windows; the choice just isn't remembered.
+  }
+}
+
+function fontStoreRequest(mode, action) {
+  return new Promise((resolve, reject) => {
+    const opening = indexedDB.open("filter2000-fonts", 1);
+    opening.onupgradeneeded = () => opening.result.createObjectStore("fonts");
+    opening.onerror = () => reject(opening.error);
+    opening.onsuccess = () => {
+      const database = opening.result;
+      try {
+        const transaction = database.transaction("fonts", mode);
+        const request = action(transaction.objectStore("fonts"));
+        transaction.oncomplete = () => {
+          database.close();
+          resolve(request.result);
+        };
+        transaction.onerror = () => {
+          database.close();
+          reject(transaction.error);
+        };
+        transaction.onabort = () => {
+          database.close();
+          reject(transaction.error);
+        };
+      } catch (error) {
+        database.close();
+        reject(error);
+      }
+    };
+  });
+}
+
+function ensureCdnFont(key) {
+  const font = cdnFonts[key];
+  if (movieFonts[key] === "loading" || movieFonts[key] === "ready") return;
+  movieFonts[key] = "loading";
+  new FontFace(font.family, font.source, { display: "swap" }).load()
+    .then((face) => {
+      document.fonts.add(face);
+      movieFonts[key] = "ready";
+      if (state.image) scheduleRender();
+    })
+    .catch(() => {
+      movieFonts[key] = "error";
+      if (!font.quiet) showToast(`${font.label} 글꼴을 불러오지 못했어요. 인터넷 연결을 확인해 주세요.`);
+    });
+}
+
+// Chrome's font sanitizer rejects some older Korean TTFs (DX영화자막 1.5 among them) over broken
+// glyph names in the 'post' table. Drawing never uses those names, so a copy with a
+// version 3.0 'post' (no names) loads fine. Returns null for anything that isn't a plain TTF/OTF.
+function fontWithoutGlyphNames(buffer) {
+  const view = new DataView(buffer.slice(0));
+  if (view.byteLength < 12) return null;
+  const flavor = view.getUint32(0);
+  if (flavor !== 0x00010000 && flavor !== 0x4f54544f && flavor !== 0x74727565) return null;
+  const tableCount = view.getUint16(4);
+  for (let index = 0; index < tableCount; index += 1) {
+    const record = 12 + index * 16;
+    if (record + 16 > view.byteLength) return null;
+    if (view.getUint32(record) !== 0x706f7374) continue;
+    const offset = view.getUint32(record + 8);
+    if (view.getUint32(record + 12) < 32 || offset + 32 > view.byteLength) return null;
+    view.setUint32(offset, 0x00030000);
+    view.setUint32(record + 12, 32);
+    let checksum = 0;
+    for (let byte = 0; byte < 32; byte += 4) checksum = (checksum + view.getUint32(offset + byte)) >>> 0;
+    view.setUint32(record + 4, checksum);
+    return view.buffer;
+  }
+  return null;
+}
+
+async function activateDxFontFile(buffer, name) {
+  let face = new FontFace(dxFontFamilies.file, buffer);
+  try {
+    await face.load();
+  } catch (error) {
+    const repaired = fontWithoutGlyphNames(buffer);
+    if (!repaired) throw error;
+    face = new FontFace(dxFontFamilies.file, repaired);
+    await face.load();
+  }
+  if (movieFonts.dxFileFace) document.fonts.delete(movieFonts.dxFileFace);
+  document.fonts.add(face);
+  movieFonts.dxFileFace = face;
+  movieFonts.dxFileName = name;
+  movieFonts.dx = "file";
+}
+
+async function detectLocalDxFont() {
+  if (movieFonts.dxLocalFace) return true;
+  try {
+    const face = new FontFace(dxFontFamilies.local, dxLocalFontSources);
+    await face.load();
+    document.fonts.add(face);
+    movieFonts.dxLocalFace = face;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function ensureDxFont() {
+  if (!movieFonts.dxCheck) movieFonts.dxCheck = resolveDxFont();
+  return movieFonts.dxCheck;
+}
+
+async function resolveDxFont() {
+  movieFonts.dx = "checking";
+  updateMovieUI();
+  const stored = await fontStoreRequest("readonly", (store) => store.get("dx")).catch(() => null);
+  if (stored?.buffer && movieFonts.dx === "checking") {
+    try {
+      await activateDxFontFile(stored.buffer, stored.name || "저장된 글꼴");
+      movieFonts.dxSaved = true;
+    } catch {
+      fontStoreRequest("readwrite", (store) => store.delete("dx")).catch(() => {});
+    }
+  }
+  if (movieFonts.dx === "checking") {
+    movieFonts.dx = await detectLocalDxFont() ? "local" : "missing";
+  }
+  updateMovieUI();
+  if (state.movieFrame && state.movieFont === "dx") scheduleRender();
+}
+
+function ensureMovieFonts() {
+  if (!state.movieFrame) return;
+  ensureCdnFont("hyemin");
+  if (state.movieFont === "chosun") ensureCdnFont("chosun");
+  ensureDxFont();
+}
+
+function showDxFontNotice(message) {
+  movieFonts.dxNotice = message;
+  updateDxFontDialog();
+}
+
+async function loadDxFontFile(file) {
+  elements.movieFontInput.value = "";
+  if (!file) return;
+  if (!/\.(ttf|otf|woff2?)$/i.test(file.name)) {
+    showDxFontNotice("TTF · OTF · WOFF 글꼴 파일만 불러올 수 있어요.");
+    return;
+  }
+  if (file.size > 40 * 1024 * 1024) {
+    showDxFontNotice("40MB 이하의 글꼴 파일을 골라 주세요.");
+    return;
+  }
+  let buffer;
+  try {
+    buffer = await file.arrayBuffer();
+    await activateDxFontFile(buffer, file.name);
+  } catch {
+    showDxFontNotice("글꼴 파일을 읽지 못했어요. 다른 파일을 골라 주세요.");
+    return;
+  }
+  const record = { name: file.name, buffer, savedAt: Date.now() };
+  movieFonts.dxSaved = await fontStoreRequest("readwrite", (store) => store.put(record, "dx")).then(() => true, () => false);
+  movieFonts.dxNotice = "";
+  state.movieFont = "dx";
+  saveMovieFontChoice();
+  closeDxFontDialog();
+  updateMovieUI();
+  scheduleRender();
+  showToast(movieFonts.dxSaved
+    ? "DX영화자막을 적용했어요. 이 브라우저에서는 다음에도 바로 쓸 수 있어요."
+    : "DX영화자막을 적용했어요. 저장이 막힌 브라우저라 새로고침하면 다시 불러와야 해요.");
+}
+
+async function clearDxFontFile() {
+  if (movieFonts.dxFileFace) document.fonts.delete(movieFonts.dxFileFace);
+  movieFonts.dxFileFace = null;
+  movieFonts.dxFileName = "";
+  movieFonts.dxSaved = false;
+  movieFonts.dxNotice = "";
+  await fontStoreRequest("readwrite", (store) => store.delete("dx")).catch(() => {});
+  movieFonts.dx = await detectLocalDxFont() ? "local" : "missing";
+  updateMovieUI();
+  scheduleRender();
+}
+
+function movieFontStack() {
+  const base = `"${cdnFonts.hyemin.family}", ${movieFontFallback}`;
+  if (state.movieFont === "chosun") return `"${cdnFonts.chosun.family}", ${base}`;
+  if (state.movieFont === "dx" && movieFonts.dx === "file") return `"${dxFontFamilies.file}", ${base}`;
+  if (state.movieFont === "dx" && movieFonts.dx === "local") return `"${dxFontFamilies.local}", ${base}`;
+  return base;
+}
 
 function hexColorToRgba(hex, alpha) {
   const value = hex.replace("#", "");
@@ -361,25 +653,25 @@ function presetFilter(name, strength) {
   const s = strength;
   const liquid = softenedLiquifyStrength(strength);
   const filters = {
-    softcam: `brightness(${1 + 0.09 * s}) contrast(${1 - 0.18 * s}) saturate(${1 - 0.25 * s}) sepia(${0.08 * s}) blur(${0.65 * s}px)`,
-    y2k: `brightness(${1 + 0.03 * s}) contrast(${1 + 0.08 * s}) saturate(${1 - 0.3 * s}) sepia(${0.46 * s}) hue-rotate(${-8 * s}deg)`,
+    softcam: `blur(${0.45 * s}px)`,
+    y2k: "none",
     analog: `brightness(${1 - 0.04 * s}) contrast(${1 + 0.25 * s}) saturate(${1 - 0.42 * s})`,
-    disposable: `brightness(${1 + 0.02 * s}) contrast(${1 + 0.26 * s}) saturate(${1 - 0.12 * s}) sepia(${0.1 * s})`,
-    ccd: `brightness(${1 - 0.02 * s}) contrast(${1 - 0.06 * s}) saturate(${1 - 0.16 * s}) hue-rotate(${4 * s}deg)`,
+    disposable: "none",
+    ccd: "none",
     liquify: `brightness(${1 - 0.05 * liquid}) contrast(${1 + 0.22 * liquid}) saturate(${1 + 0.42 * liquid})`,
     liquifybrush: "none",
     signal: `brightness(${1 - 0.04 * s}) contrast(${1 + 0.2 * s}) saturate(${1 + 0.28 * s})`,
     frameecho: `brightness(${1 - 0.03 * s}) contrast(${1 + 0.12 * s}) saturate(${1 + 0.18 * s})`,
-    prism: `brightness(${1 + 0.08 * s}) contrast(${1 - 0.12 * s}) saturate(${1 + 0.12 * s})`,
+    prism: `brightness(${1 + 0.03 * s}) contrast(${1 - 0.05 * s})`,
     comic: `brightness(${1 + 0.02 * s}) contrast(${1 + 0.16 * s}) grayscale(1)`,
-    holo: `brightness(${1 + 0.05 * s}) contrast(${1 + 0.03 * s}) saturate(${1 - 0.06 * s})`,
+    dreamcore: `blur(${0.35 * s}px)`,
     pixel: `brightness(${1 + 0.015 * s}) contrast(${1 + 0.08 * s}) saturate(${1 + 0.12 * s})`,
-    summerfilm: `brightness(${1 + 0.08 * s}) contrast(${1 + 0.09 * s}) saturate(${1 + 0.34 * s}) hue-rotate(${-3 * s}deg)`,
-    faded: `brightness(${1 - 0.08 * s}) contrast(${1 - 0.24 * s}) saturate(${1 - 0.48 * s}) sepia(${0.08 * s})`,
-    softglow: `brightness(${1 + 0.08 * s}) contrast(${1 - 0.2 * s}) saturate(${1 - 0.05 * s}) sepia(${0.04 * s})`,
+    summerfilm: "none",
+    faded: "none",
+    softglow: "none",
     heartbokeh: `brightness(${1 - 0.03 * s}) contrast(${1 + 0.08 * s}) saturate(${1 + 0.12 * s})`,
-    milkyveil: `brightness(${1 + 0.13 * s}) contrast(${1 - 0.3 * s}) saturate(${1 - 0.24 * s}) sepia(${0.035 * s}) blur(${0.48 * s}px)`,
-    hearttunnel: `brightness(${1 + 0.035 * s}) contrast(${1 - 0.08 * s}) saturate(${1 + 0.06 * s})`,
+    milkyveil: `blur(${0.3 * s}px)`,
+    hearttunnel: "none",
   };
   return filters[name] || "none";
 }
@@ -444,25 +736,6 @@ function addVignette(ctx, width, height, amount) {
   ctx.restore();
 }
 
-function addFlash(ctx, width, height, strength) {
-  const gradient = ctx.createRadialGradient(
-    width * 0.48,
-    height * 0.43,
-    0,
-    width * 0.48,
-    height * 0.43,
-    Math.max(width, height) * 0.58,
-  );
-  gradient.addColorStop(0, `rgba(255,255,245,${0.45 * strength})`);
-  gradient.addColorStop(0.34, `rgba(255,241,218,${0.14 * strength})`);
-  gradient.addColorStop(1, "rgba(255,220,190,0)");
-  ctx.save();
-  ctx.globalCompositeOperation = "screen";
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, width, height);
-  ctx.restore();
-}
-
 function addScanlines(ctx, width, height, strength) {
   const gap = Math.max(3, Math.round(height / 280));
   ctx.save();
@@ -471,6 +744,348 @@ function addScanlines(ctx, width, height, strength) {
   for (let y = 0; y < height; y += gap) ctx.fillRect(0, y, width, Math.max(1, gap * 0.24));
   ctx.restore();
 }
+
+// ───── colour-grading toolkit: real per-pixel looks instead of gradients laid over the photo ─────
+
+// Monotone cubic curve through [input, output] points (0–255), sampled into a 256-entry table.
+function curveTable(points) {
+  const xs = points.map((point) => point[0]);
+  const ys = points.map((point) => point[1]);
+  const count = points.length;
+  const slopes = [];
+  const tangents = [];
+  for (let i = 0; i < count - 1; i += 1) slopes[i] = (ys[i + 1] - ys[i]) / (xs[i + 1] - xs[i]);
+  tangents[0] = slopes[0];
+  tangents[count - 1] = slopes[count - 2];
+  for (let i = 1; i < count - 1; i += 1) {
+    tangents[i] = slopes[i - 1] * slopes[i] <= 0 ? 0 : (slopes[i - 1] + slopes[i]) / 2;
+  }
+  for (let i = 0; i < count - 1; i += 1) {
+    if (slopes[i] === 0) {
+      tangents[i] = 0;
+      tangents[i + 1] = 0;
+      continue;
+    }
+    const a = tangents[i] / slopes[i];
+    const b = tangents[i + 1] / slopes[i];
+    const length = a * a + b * b;
+    if (length > 9) {
+      const scale = 3 / Math.sqrt(length);
+      tangents[i] = scale * a * slopes[i];
+      tangents[i + 1] = scale * b * slopes[i];
+    }
+  }
+  const table = new Float32Array(256);
+  let segment = 0;
+  for (let x = 0; x < 256; x += 1) {
+    while (segment < count - 2 && x > xs[segment + 1]) segment += 1;
+    const span = xs[segment + 1] - xs[segment];
+    const t = Math.min(1, Math.max(0, (x - xs[segment]) / span));
+    const t2 = t * t;
+    const t3 = t2 * t;
+    table[x] = (2 * t3 - 3 * t2 + 1) * ys[segment]
+      + (t3 - 2 * t2 + t) * span * tangents[segment]
+      + (-2 * t3 + 3 * t2) * ys[segment + 1]
+      + (t3 - t2) * span * tangents[segment + 1];
+  }
+  return table;
+}
+
+const lookTableCache = new Map();
+
+// One pass: tone curves (master + per channel), saturation, then shadow / highlight colour shifts.
+// `strength` blends the whole look against the untouched photo.
+function applyLook(ctx, width, height, look, strength) {
+  if (strength <= 0.01) return;
+  let tables = lookTableCache.get(look);
+  if (!tables) {
+    const master = look.curve ? curveTable(look.curve) : null;
+    tables = ["red", "green", "blue"].map((key) => {
+      const channel = look[key] ? curveTable(look[key]) : null;
+      const table = new Float32Array(256);
+      for (let value = 0; value < 256; value += 1) {
+        const toned = master ? master[value] : value;
+        table[value] = channel ? channel[Math.max(0, Math.min(255, Math.round(toned)))] : toned;
+      }
+      return table;
+    });
+    lookTableCache.set(look, tables);
+  }
+  const lut = tables.map((table) => {
+    const blended = new Uint8ClampedArray(256);
+    for (let value = 0; value < 256; value += 1) blended[value] = value + (table[value] - value) * strength;
+    return blended;
+  });
+  const saturation = 1 + ((look.saturation ?? 1) - 1) * strength;
+  const shadow = (look.shadowTint || [0, 0, 0]).map((value) => value * strength);
+  const highlight = (look.highlightTint || [0, 0, 0]).map((value) => value * strength);
+  const image = ctx.getImageData(0, 0, width, height);
+  const data = image.data;
+  for (let index = 0; index < data.length; index += 4) {
+    let red = lut[0][data[index]];
+    let green = lut[1][data[index + 1]];
+    let blue = lut[2][data[index + 2]];
+    const light = red * 0.299 + green * 0.587 + blue * 0.114;
+    if (saturation !== 1) {
+      red = light + (red - light) * saturation;
+      green = light + (green - light) * saturation;
+      blue = light + (blue - light) * saturation;
+    }
+    const t = light / 255;
+    const low = (1 - t) * (1 - t);
+    const high = t * t;
+    data[index] = red + shadow[0] * low + highlight[0] * high;
+    data[index + 1] = green + shadow[1] * low + highlight[1] * high;
+    data[index + 2] = blue + shadow[2] * low + highlight[2] * high;
+  }
+  ctx.putImageData(image, 0, 0);
+}
+
+// Light that spills out of the bright parts only (bloom / film halation), never a fixed spot.
+function addGlow(ctx, width, height, options, strength) {
+  const { threshold = 0.7, radius = 0.012, amount = 0.4, tint = [255, 255, 255], mode = "screen", spectrum = false } = options;
+  if (strength <= 0.01 || amount <= 0) return;
+  const scale = 4;
+  const small = document.createElement("canvas");
+  small.width = Math.max(1, Math.round(width / scale));
+  small.height = Math.max(1, Math.round(height / scale));
+  const smallCtx = small.getContext("2d", { willReadFrequently: true });
+  smallCtx.drawImage(ctx.canvas, 0, 0, small.width, small.height);
+  const image = smallCtx.getImageData(0, 0, small.width, small.height);
+  const data = image.data;
+  const floor = threshold * 255;
+  const span = Math.max(1, 255 - floor);
+  for (let y = 0; y < small.height; y += 1) {
+    for (let x = 0; x < small.width; x += 1) {
+      const index = (y * small.width + x) * 4;
+      const light = data[index] * 0.299 + data[index + 1] * 0.587 + data[index + 2] * 0.114;
+      const t = Math.min(1, Math.max(0, (light - floor) / span));
+      const weight = t * t * (3 - 2 * t);
+      let tr = tint[0];
+      let tg = tint[1];
+      let tb = tint[2];
+      if (spectrum) {
+        // prism: the glow takes a rainbow colour across the frame
+        const hue = ((x / small.width) * 0.8 + (y / small.height) * 0.4) * Math.PI * 2;
+        tr = 190 + 65 * Math.cos(hue);
+        tg = 190 + 65 * Math.cos(hue - 2.094);
+        tb = 190 + 65 * Math.cos(hue + 2.094);
+      }
+      data[index] = data[index] * weight * tr / 255;
+      data[index + 1] = data[index + 1] * weight * tg / 255;
+      data[index + 2] = data[index + 2] * weight * tb / 255;
+      data[index + 3] = 255;
+    }
+  }
+  smallCtx.putImageData(image, 0, 0);
+  ctx.save();
+  ctx.globalCompositeOperation = mode;
+  ctx.globalAlpha = Math.min(1, amount * strength);
+  ctx.filter = `blur(${Math.max(1, Math.min(width, height) * radius)}px)`;
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(small, 0, 0, width, height);
+  ctx.restore();
+}
+
+// Soft-focus filter: a blurred copy mixed back in ("lighten" behaves like a Pro-Mist).
+function addDiffusion(ctx, width, height, radius, amount, strength, mode = "source-over") {
+  if (strength <= 0.01 || amount <= 0) return;
+  const copy = snapshotCanvas(ctx.canvas);
+  ctx.save();
+  ctx.globalCompositeOperation = mode;
+  ctx.globalAlpha = Math.min(1, amount * strength);
+  ctx.filter = `blur(${Math.max(1, Math.min(width, height) * radius)}px)`;
+  ctx.drawImage(copy, 0, 0, width, height);
+  ctx.restore();
+}
+
+// Lens-style colour fringing that grows toward the corners.
+function addChromaticAberration(ctx, width, height, amount) {
+  if (amount <= 0.0002) return;
+  const image = ctx.getImageData(0, 0, width, height);
+  const source = new Uint8ClampedArray(image.data);
+  const data = image.data;
+  const centerX = width / 2;
+  const centerY = height / 2;
+  for (let y = 0; y < height; y += 1) {
+    const dy = y - centerY;
+    const redY = Math.min(height - 1, Math.max(0, Math.round(centerY + dy * (1 + amount))));
+    const blueY = Math.min(height - 1, Math.max(0, Math.round(centerY + dy * (1 - amount))));
+    for (let x = 0; x < width; x += 1) {
+      const dx = x - centerX;
+      const redX = Math.min(width - 1, Math.max(0, Math.round(centerX + dx * (1 + amount))));
+      const blueX = Math.min(width - 1, Math.max(0, Math.round(centerX + dx * (1 - amount))));
+      const index = (y * width + x) * 4;
+      data[index] = source[(redY * width + redX) * 4];
+      data[index + 2] = source[(blueY * width + blueX) * 4 + 2];
+    }
+  }
+  ctx.putImageData(image, 0, 0);
+}
+
+// Film grain as an overlay texture, so it lives mostly in the mid-tones like real grain.
+function addFilmGrain(ctx, width, height, amount, seed, grainSize = 1) {
+  if (amount <= 0.001) return;
+  const grain = document.createElement("canvas");
+  grain.width = Math.max(1, Math.round(width / grainSize));
+  grain.height = Math.max(1, Math.round(height / grainSize));
+  const grainCtx = grain.getContext("2d");
+  const image = grainCtx.createImageData(grain.width, grain.height);
+  const data = image.data;
+  const random = mulberry32(seed + 1301);
+  for (let index = 0; index < data.length; index += 4) {
+    const noise = (random() + random() + random() - 1.5) / 1.5;
+    const value = 128 + noise * 128 * amount;
+    data[index] = value;
+    data[index + 1] = value;
+    data[index + 2] = value;
+    data[index + 3] = 255;
+  }
+  grainCtx.putImageData(image, 0, 0);
+  ctx.save();
+  ctx.globalCompositeOperation = "overlay";
+  ctx.imageSmoothingEnabled = grainSize > 1;
+  ctx.drawImage(grain, 0, 0, width, height);
+  ctx.restore();
+}
+
+function grainSizeFor(width, height) {
+  return Math.max(1, Math.min(width, height) / 900);
+}
+
+// Hazy glow creeping in from the frame edges (dreamy photos), never across the middle.
+function addEdgeHaze(ctx, width, height, color, amount) {
+  if (amount <= 0) return;
+  const gradient = ctx.createRadialGradient(
+    width / 2,
+    height / 2,
+    Math.min(width, height) * 0.3,
+    width / 2,
+    height / 2,
+    Math.hypot(width, height) * 0.56,
+  );
+  gradient.addColorStop(0, `rgba(${color[0]},${color[1]},${color[2]},0)`);
+  gradient.addColorStop(0.55, `rgba(${color[0]},${color[1]},${color[2]},${amount * 0.35})`);
+  gradient.addColorStop(1, `rgba(${color[0]},${color[1]},${color[2]},${amount})`);
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, width, height);
+  ctx.restore();
+}
+
+// Film light leak: uneven warm blobs bleeding in from one edge, softened, screen-blended.
+function addLightLeak(ctx, width, height, strength, seed, side = "right") {
+  if (strength <= 0.01) return;
+  const random = mulberry32(seed + 404);
+  const layer = document.createElement("canvas");
+  layer.width = width;
+  layer.height = height;
+  const layerCtx = layer.getContext("2d");
+  const edgeX = side === "right" ? width : 0;
+  const reach = Math.min(width, height);
+  for (let blob = 0; blob < 4; blob += 1) {
+    const y = height * (0.12 + random() * 0.76);
+    const radius = reach * (0.18 + random() * 0.26);
+    const gradient = layerCtx.createRadialGradient(edgeX, y, 0, edgeX, y, radius);
+    gradient.addColorStop(0, `rgba(255,${Math.round(150 + random() * 60)},${Math.round(60 + random() * 40)},0.9)`);
+    gradient.addColorStop(0.35, "rgba(255,92,36,0.45)");
+    gradient.addColorStop(1, "rgba(220,30,20,0)");
+    layerCtx.fillStyle = gradient;
+    layerCtx.fillRect(0, 0, width, height);
+  }
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  ctx.globalAlpha = 0.42 * strength;
+  ctx.filter = `blur(${Math.max(2, reach * 0.02)}px)`;
+  ctx.drawImage(layer, 0, 0);
+  ctx.restore();
+}
+
+// Tone numbers are 0–255 curve points; tints are channel shifts applied to shadows / highlights.
+const filterLooks = {
+  softcam: {
+    curve: [[0, 20], [64, 72], [128, 136], [200, 204], [255, 242]],
+    red: [[0, 2], [128, 132], [255, 255]],
+    blue: [[0, 10], [128, 124], [255, 244]],
+    saturation: 0.86,
+    shadowTint: [4, -2, 8],
+    highlightTint: [8, 2, -4],
+  },
+  y2k: {
+    curve: [[0, 4], [60, 52], [128, 138], [200, 218], [255, 252]],
+    red: [[0, 12], [128, 144], [255, 255]],
+    green: [[0, 4], [128, 128], [255, 246]],
+    blue: [[0, 0], [128, 100], [255, 210]],
+    saturation: 0.96,
+    shadowTint: [10, 2, -8],
+    highlightTint: [8, 4, -12],
+  },
+  disposable: {
+    curve: [[0, 0], [48, 32], [128, 138], [200, 222], [255, 252]],
+    red: [[0, 4], [128, 132], [255, 255]],
+    green: [[0, 10], [128, 130], [255, 244]],
+    blue: [[0, 14], [128, 116], [255, 224]],
+    saturation: 1.12,
+    shadowTint: [-4, 6, 2],
+    highlightTint: [10, 4, -10],
+  },
+  ccd: {
+    curve: [[0, 8], [128, 134], [220, 238], [255, 255]],
+    red: [[0, 0], [128, 118], [255, 236]],
+    green: [[0, 4], [128, 128], [255, 250]],
+    blue: [[0, 20], [128, 144], [255, 255]],
+    saturation: 0.9,
+    shadowTint: [-6, 0, 12],
+    highlightTint: [-4, 4, 10],
+  },
+  dreamcore: {
+    curve: [[0, 40], [70, 98], [140, 162], [210, 222], [255, 244]],
+    blue: [[0, 22], [128, 136], [255, 250]],
+    saturation: 0.8,
+    shadowTint: [-10, 8, 16],
+    highlightTint: [12, 2, 10],
+  },
+  summerfilm: {
+    curve: [[0, 14], [64, 74], [128, 142], [192, 208], [255, 250]],
+    red: [[0, 0], [128, 124], [255, 255]],
+    green: [[0, 8], [128, 134], [255, 252]],
+    blue: [[0, 22], [128, 138], [255, 244]],
+    saturation: 1.12,
+    shadowTint: [-12, 4, 10],
+    highlightTint: [8, 4, -6],
+  },
+  faded: {
+    curve: [[0, 46], [80, 98], [160, 166], [230, 216], [255, 228]],
+    blue: [[0, 20], [128, 130], [255, 232]],
+    saturation: 0.6,
+    shadowTint: [-8, 0, 10],
+    highlightTint: [6, 3, -4],
+  },
+  softglow: {
+    curve: [[0, 16], [64, 86], [128, 154], [192, 214], [255, 248]],
+    red: [[0, 4], [255, 255]],
+    blue: [[0, 6], [128, 124], [255, 240]],
+    saturation: 0.92,
+    shadowTint: [6, -2, 4],
+    highlightTint: [8, 4, -6],
+  },
+  milkyveil: {
+    curve: [[0, 54], [80, 112], [160, 178], [230, 232], [255, 244]],
+    red: [[0, 6], [255, 255]],
+    blue: [[0, 10], [255, 252]],
+    saturation: 0.78,
+    shadowTint: [8, 0, 10],
+    highlightTint: [4, 2, 4],
+  },
+  hearttunnel: {
+    curve: [[0, 24], [128, 142], [255, 252]],
+    saturation: 1.05,
+    shadowTint: [18, -6, 10],
+    highlightTint: [14, 0, 6],
+  },
+};
+
 
 function applyNeonLiquify(ctx, width, height, strength, seed, phaseOffset = 0) {
   strength = softenedLiquifyStrength(strength);
@@ -723,192 +1338,68 @@ function applyFrameEcho(ctx, width, height, strength, seed, phaseOffset = 0) {
 
 function applyPrismEcho(ctx, width, height, strength) {
   if (strength <= 0.01) return;
-  const source = snapshotCanvas(ctx.canvas);
-  const distance = width * (0.012 + strength * 0.045);
-
-  ctx.save();
-  ctx.globalCompositeOperation = "screen";
-  ctx.globalAlpha = 0.08 + strength * 0.13;
-  ctx.filter = `blur(${Math.max(1, width * 0.0025 * strength)}px) hue-rotate(-24deg) saturate(1.5)`;
-  ctx.drawImage(source, -distance, 0, width, height);
-  ctx.filter = `blur(${Math.max(1, width * 0.002 * strength)}px) hue-rotate(145deg) saturate(1.6)`;
-  ctx.drawImage(source, distance, 0, width, height);
-  ctx.filter = "none";
-
-  const spectrum = ctx.createLinearGradient(0, 0, width, height);
-  spectrum.addColorStop(0, "rgba(255,60,123,0.18)");
-  spectrum.addColorStop(0.28, "rgba(255,222,93,0.12)");
-  spectrum.addColorStop(0.52, "rgba(90,245,220,0.18)");
-  spectrum.addColorStop(0.76, "rgba(93,101,255,0.17)");
-  spectrum.addColorStop(1, "rgba(255,58,157,0.14)");
-  ctx.globalAlpha = strength;
-  ctx.fillStyle = spectrum;
-  ctx.beginPath();
-  ctx.moveTo(0, height * 0.06);
-  ctx.lineTo(width * 0.68, 0);
-  ctx.lineTo(width, height * 0.7);
-  ctx.lineTo(width * 0.28, height);
-  ctx.closePath();
-  ctx.fill();
-  ctx.restore();
-  addBloom(ctx, ctx.canvas, width, height, strength * 0.46, "#f9efff");
-}
-
-function applyHoloDream(ctx, width, height, strength) {
-  if (strength <= 0.01) return;
-  const imageData = ctx.getImageData(0, 0, width, height);
-  const source = new Uint8ClampedArray(imageData.data);
-  const data = imageData.data;
-  const amount = 0.08 + strength * 0.18;
-
+  const minSide = Math.min(width, height);
+  // real dispersion: the red and blue planes drift apart along a diagonal
+  const shift = Math.max(1, Math.round(minSide * (0.0015 + strength * 0.006)));
+  const lift = Math.round(shift * 0.5);
+  const image = ctx.getImageData(0, 0, width, height);
+  const source = new Uint8ClampedArray(image.data);
+  const data = image.data;
   for (let y = 0; y < height; y += 1) {
-    const ny = y / Math.max(1, height - 1);
+    const redY = Math.max(0, y - lift);
+    const blueY = Math.min(height - 1, y + lift);
     for (let x = 0; x < width; x += 1) {
-      const index = pixelIndex(x, y, width);
-      const nx = x / Math.max(1, width - 1);
-      const light = luminance(source, index) / 255;
-      const rose = 0.5 + 0.5 * Math.sin((nx * 1.2 + ny * 0.72) * Math.PI);
-      const tint = [
-        196 + rose * 48,
-        224 - rose * 20 + light * 18,
-        244 + rose * 8,
-      ];
-      const tintAmount = amount * (0.72 + light * 0.28);
-      data[index] = mixChannel(source[index], tint[0], tintAmount);
-      data[index + 1] = mixChannel(source[index + 1], tint[1], tintAmount);
-      data[index + 2] = mixChannel(source[index + 2], tint[2], tintAmount);
+      const index = (y * width + x) * 4;
+      data[index] = source[(redY * width + Math.max(0, x - shift)) * 4];
+      data[index + 2] = source[(blueY * width + Math.min(width - 1, x + shift)) * 4 + 2];
     }
   }
-  ctx.putImageData(imageData, 0, 0);
+  ctx.putImageData(image, 0, 0);
 
+  // two faint ghost images split by hue, like light passing through glass
+  const copy = snapshotCanvas(ctx.canvas);
+  const offset = minSide * (0.012 + strength * 0.03);
   ctx.save();
   ctx.globalCompositeOperation = "screen";
-
-  const skyGlow = ctx.createRadialGradient(width * 0.16, height * 0.22, 0, width * 0.16, height * 0.22, Math.max(width, height) * 0.58);
-  skyGlow.addColorStop(0, `rgba(108,232,255,${0.3 * strength})`);
-  skyGlow.addColorStop(0.48, `rgba(170,212,255,${0.12 * strength})`);
-  skyGlow.addColorStop(1, "rgba(170,212,255,0)");
-  ctx.fillStyle = skyGlow;
-  ctx.fillRect(0, 0, width, height);
-
-  const roseGlow = ctx.createRadialGradient(width * 0.86, height * 0.72, 0, width * 0.86, height * 0.72, Math.max(width, height) * 0.52);
-  roseGlow.addColorStop(0, `rgba(255,157,211,${0.25 * strength})`);
-  roseGlow.addColorStop(0.52, `rgba(219,183,255,${0.11 * strength})`);
-  roseGlow.addColorStop(1, "rgba(219,183,255,0)");
-  ctx.fillStyle = roseGlow;
-  ctx.fillRect(0, 0, width, height);
-
-  const beam = ctx.createLinearGradient(0, height, width, 0);
-  beam.addColorStop(0, "rgba(123,242,255,0)");
-  beam.addColorStop(0.34, `rgba(197,247,255,${0.14 * strength})`);
-  beam.addColorStop(0.48, `rgba(255,238,251,${0.34 * strength})`);
-  beam.addColorStop(0.61, `rgba(221,191,255,${0.13 * strength})`);
-  beam.addColorStop(1, "rgba(255,183,223,0)");
-  ctx.fillStyle = beam;
-  ctx.beginPath();
-  ctx.moveTo(-width * 0.08, height * 0.66);
-  ctx.lineTo(width * 0.72, -height * 0.08);
-  ctx.lineTo(width * 1.04, height * 0.2);
-  ctx.lineTo(width * 0.2, height * 0.94);
-  ctx.closePath();
-  ctx.fill();
+  ctx.globalAlpha = 0.06 + strength * 0.12;
+  ctx.filter = `blur(${Math.max(1, minSide * 0.003)}px) hue-rotate(-30deg) saturate(1.5)`;
+  ctx.drawImage(copy, -offset, -offset * 0.3, width, height);
+  ctx.filter = `blur(${Math.max(1, minSide * 0.003)}px) hue-rotate(150deg) saturate(1.5)`;
+  ctx.drawImage(copy, offset, offset * 0.3, width, height);
   ctx.restore();
-
-  const sourceCanvas = snapshotCanvas(ctx.canvas);
-  ctx.save();
-  ctx.globalCompositeOperation = "screen";
-  ctx.globalAlpha = 0.035 + strength * 0.045;
-  ctx.filter = `blur(${Math.max(1, width * 0.0022 * strength)}px) brightness(1.14)`;
-  ctx.drawImage(sourceCanvas, 0, 0, width, height);
-  ctx.restore();
+  addGlow(ctx, width, height, { threshold: 0.66, radius: 0.018, amount: 0.55, spectrum: true }, strength);
 }
 
-function applyFadedMemory(ctx, width, height, strength) {
+// Dreamcore / liminal: washed-out haze, teal shadows and pink highlights, soft focus,
+// glow that comes from the bright areas, lens fringing and fog creeping in from the edges.
+function applyDreamcore(ctx, width, height, strength) {
   if (strength <= 0.01) return;
-  const imageData = ctx.getImageData(0, 0, width, height);
-  const source = new Uint8ClampedArray(imageData.data);
-  const data = imageData.data;
-  const amount = 0.24 + strength * 0.54;
-
-  for (let index = 0; index < data.length; index += 4) {
-    const light = luminance(source, index);
-    const target = [
-      source[index] * 0.63 + light * 0.08 + 37,
-      source[index + 1] * 0.65 + light * 0.07 + 42,
-      source[index + 2] * 0.69 + light * 0.06 + 49,
-    ];
-    data[index] = mixChannel(source[index], target[0], amount);
-    data[index + 1] = mixChannel(source[index + 1], target[1], amount);
-    data[index + 2] = mixChannel(source[index + 2], target[2], amount);
-  }
-  ctx.putImageData(imageData, 0, 0);
-  addColorWash(ctx, width, height, "#53666a", 0.1 * strength, "multiply");
-  addColorWash(ctx, width, height, "#d8cabd", 0.04 * strength, "screen");
-  addVignette(ctx, width, height, 0.16 * strength);
-  addOrangeLightLeak(ctx, width, height, strength);
+  applyLook(ctx, width, height, filterLooks.dreamcore, strength);
+  addDiffusion(ctx, width, height, 0.012, 0.3, strength);
+  addGlow(ctx, width, height, { threshold: 0.55, radius: 0.022, amount: 0.55, tint: [255, 236, 250] }, strength);
+  addChromaticAberration(ctx, width, height, 0.0045 * strength);
+  addEdgeHaze(ctx, width, height, [236, 232, 255], 0.26 * strength);
 }
 
-function applySoftGlow(ctx, width, height, strength, animationPhase = 0) {
+function applyFadedMemory(ctx, width, height, strength, seed) {
   if (strength <= 0.01) return;
-  const source = snapshotCanvas(ctx.canvas);
-  const breath = 1 + Math.sin(animationPhase) * 0.07 * strength;
-  ctx.save();
-  ctx.globalCompositeOperation = "screen";
-  ctx.globalAlpha = (0.12 + strength * 0.2) * breath;
-  ctx.filter = `blur(${Math.max(4, Math.min(width, height) * (0.008 + strength * 0.012))}px) brightness(1.12)`;
-  ctx.drawImage(source, 0, 0, width, height);
-  ctx.filter = "none";
+  applyLook(ctx, width, height, filterLooks.faded, strength);
+  addVignette(ctx, width, height, 0.12 * strength);
+  addLightLeak(ctx, width, height, strength * 0.8, seed, "right");
+}
 
-  const glow = ctx.createRadialGradient(
-    width * 0.48,
-    height * 0.42,
-    0,
-    width * 0.48,
-    height * 0.42,
-    Math.max(width, height) * 0.62,
-  );
-  glow.addColorStop(0, `rgba(255,250,239,${0.19 * strength})`);
-  glow.addColorStop(0.48, `rgba(255,217,231,${0.1 * strength})`);
-  glow.addColorStop(1, "rgba(222,205,255,0)");
-  ctx.fillStyle = glow;
-  ctx.fillRect(0, 0, width, height);
-  ctx.restore();
-  addColorWash(ctx, width, height, "#fff1e7", 0.045 * strength, "screen");
+function applySoftGlow(ctx, width, height, strength) {
+  if (strength <= 0.01) return;
+  applyLook(ctx, width, height, filterLooks.softglow, strength);
+  addDiffusion(ctx, width, height, 0.01, 0.35, strength, "lighten");
+  addGlow(ctx, width, height, { threshold: 0.5, radius: 0.02, amount: 0.62, tint: [255, 244, 236] }, strength);
 }
 
 function applyMilkyVeil(ctx, width, height, strength) {
   if (strength <= 0.01) return;
-  const source = snapshotCanvas(ctx.canvas);
-  const minSide = Math.min(width, height);
-
-  ctx.save();
-  ctx.globalCompositeOperation = "screen";
-  ctx.globalAlpha = 0.08 + strength * 0.2;
-  ctx.filter = `blur(${Math.max(4, minSide * (0.009 + strength * 0.012))}px) brightness(1.08)`;
-  ctx.drawImage(source, 0, 0, width, height);
-  ctx.filter = "none";
-
-  const veil = ctx.createLinearGradient(0, 0, width, height);
-  veil.addColorStop(0, `rgba(255,246,250,${0.19 * strength})`);
-  veil.addColorStop(0.5, `rgba(247,249,255,${0.11 * strength})`);
-  veil.addColorStop(1, `rgba(240,229,239,${0.16 * strength})`);
-  ctx.fillStyle = veil;
-  ctx.fillRect(0, 0, width, height);
-
-  const faceLight = ctx.createRadialGradient(
-    width * 0.48,
-    height * 0.34,
-    0,
-    width * 0.48,
-    height * 0.34,
-    Math.max(width, height) * 0.68,
-  );
-  faceLight.addColorStop(0, `rgba(255,255,255,${0.14 * strength})`);
-  faceLight.addColorStop(0.5, `rgba(255,233,240,${0.06 * strength})`);
-  faceLight.addColorStop(1, "rgba(232,235,247,0)");
-  ctx.fillStyle = faceLight;
-  ctx.fillRect(0, 0, width, height);
-  ctx.restore();
+  applyLook(ctx, width, height, filterLooks.milkyveil, strength);
+  addDiffusion(ctx, width, height, 0.012, 0.3, strength);
+  addGlow(ctx, width, height, { threshold: 0.62, radius: 0.016, amount: 0.35, tint: [255, 245, 248] }, strength);
 }
 
 function addHeartPath(ctx, x, y, size) {
@@ -922,10 +1413,33 @@ function addHeartPath(ctx, x, y, size) {
 }
 
 function applyHeartTunnel(ctx, width, height, strength) {
-  if (strength <= 0.01 || !heartTunnelTexture.complete || !heartTunnelTexture.naturalWidth) return;
+  if (strength <= 0.01) return;
+  applyLook(ctx, width, height, filterLooks.hearttunnel, strength);
+  if (!heartTunnelTexture.complete || !heartTunnelTexture.naturalWidth) return;
+  const layer = document.createElement("canvas");
+  layer.width = width;
+  layer.height = height;
+  const layerCtx = layer.getContext("2d");
+  drawImageCover(layerCtx, heartTunnelTexture, 0, 0, width, height);
+  // the rings fade out toward the middle so faces stay readable
+  const reach = Math.max(width, height);
+  const clear = layerCtx.createRadialGradient(width / 2, height * 0.48, 0, width / 2, height * 0.48, reach * 0.36);
+  clear.addColorStop(0, "rgba(0,0,0,.8)");
+  clear.addColorStop(1, "rgba(0,0,0,0)");
+  layerCtx.globalCompositeOperation = "destination-out";
+  layerCtx.fillStyle = clear;
+  layerCtx.fillRect(0, 0, width, height);
   ctx.save();
-  ctx.globalAlpha = 0.05 + Math.pow(strength, 1.1) * 0.77;
-  drawImageCover(ctx, heartTunnelTexture, 0, 0, width, height);
+  // soft-light keeps the photo's own shading; screen lets the white rings and sparkles through
+  ctx.globalCompositeOperation = "soft-light";
+  ctx.globalAlpha = 0.55 + strength * 0.45;
+  ctx.drawImage(layer, 0, 0);
+  ctx.globalCompositeOperation = "multiply";
+  ctx.globalAlpha = 0.14 * strength;
+  ctx.drawImage(layer, 0, 0);
+  ctx.globalCompositeOperation = "screen";
+  ctx.globalAlpha = 0.06 + strength * 0.16;
+  ctx.drawImage(layer, 0, 0);
   ctx.restore();
 }
 
@@ -964,7 +1478,18 @@ function applyHeartBokeh(ctx, width, height, strength, seed, animationPhase = 0)
           }
         }
       }
-      if (localPeak) candidates.push({
+      // a white shirt is bright but flat; a point light stands out from what surrounds it
+      let surround = 0;
+      let samples = 0;
+      for (let offsetY = -3; offsetY <= 3; offsetY += 1) {
+        for (let offsetX = -3; offsetX <= 3; offsetX += 1) {
+          const sx = Math.min(sample.width - 1, Math.max(0, x + offsetX));
+          const sy = Math.min(sample.height - 1, Math.max(0, y + offsetY));
+          surround += luminance(pixels, pixelIndex(sx, sy, sample.width));
+          samples += 1;
+        }
+      }
+      if (localPeak && score - surround / samples > 16) candidates.push({
         x,
         y,
         light,
@@ -978,14 +1503,14 @@ function applyHeartBokeh(ctx, width, height, strength, seed, animationPhase = 0)
 
   candidates.sort((left, right) => right.score - left.score);
   const chosen = [];
-  const limit = Math.round(6 + strength * 11);
+  const limit = Math.round(4 + strength * 8);
   for (const candidate of candidates) {
     if (chosen.length >= limit) break;
     if (chosen.some((item) => Math.hypot(item.x - candidate.x, item.y - candidate.y) < 4)) continue;
     chosen.push(candidate);
   }
 
-  addBloom(ctx, ctx.canvas, width, height, strength * 0.56, "#fff0d2");
+  addGlow(ctx, width, height, { threshold: 0.7, radius: 0.012, amount: 0.4, tint: [255, 236, 200] }, strength);
   const random = mulberry32(seed + 887);
   const minSide = Math.min(width, height);
   ctx.save();
@@ -1006,14 +1531,6 @@ function applyHeartBokeh(ctx, width, height, strength, seed, animationPhase = 0)
     halo.addColorStop(1, "rgba(255,70,55,0)");
     ctx.fillStyle = halo;
     ctx.fillRect(x - size, y - size, size * 2, size * 2);
-
-    ctx.save();
-    ctx.globalCompositeOperation = "source-over";
-    ctx.globalAlpha = 0.1 + strength * 0.08;
-    ctx.fillStyle = "#16131f";
-    addHeartPath(ctx, x, y, size * 0.76);
-    ctx.fill();
-    ctx.restore();
 
     ctx.save();
     ctx.globalAlpha = 0.34 + depth * 0.22;
@@ -1106,31 +1623,20 @@ function addVerticalFilmDate(ctx, width, height, strength) {
   ctx.restore();
 }
 
-function addOrangeLightLeak(ctx, width, height, strength) {
-  const leak = ctx.createLinearGradient(width * 0.58, 0, width, 0);
-  leak.addColorStop(0, "rgba(255,70,28,0)");
-  leak.addColorStop(0.55, `rgba(255,126,40,${0.08 * strength})`);
-  leak.addColorStop(0.82, `rgba(255,52,29,${0.28 * strength})`);
-  leak.addColorStop(1, `rgba(158,12,12,${0.38 * strength})`);
-  ctx.save();
-  ctx.globalCompositeOperation = "screen";
-  ctx.fillStyle = leak;
-  ctx.fillRect(0, 0, width, height);
-  ctx.restore();
-}
-
-function applySummerFilm(ctx, width, height, strength) {
+function applySummerFilm(ctx, width, height, strength, seed) {
   if (strength <= 0.01) return;
-  addColorWash(ctx, width, height, "#8ce7ee", 0.05 * strength, "screen");
-  addOrangeLightLeak(ctx, width, height, strength);
-
+  applyLook(ctx, width, height, filterLooks.summerfilm, strength);
+  addGlow(ctx, width, height, { threshold: 0.8, radius: 0.01, amount: 0.25, tint: [255, 200, 170] }, strength);
+  addLightLeak(ctx, width, height, strength * 0.55, seed, "left");
   const printFade = ctx.createLinearGradient(0, 0, 0, height);
-  printFade.addColorStop(0, `rgba(15,20,22,${0.13 * strength})`);
-  printFade.addColorStop(0.12, "rgba(15,20,22,0)");
-  printFade.addColorStop(0.86, "rgba(15,20,22,0)");
-  printFade.addColorStop(1, `rgba(15,20,22,${0.16 * strength})`);
+  printFade.addColorStop(0, `rgba(15,20,22,${0.1 * strength})`);
+  printFade.addColorStop(0.1, "rgba(15,20,22,0)");
+  printFade.addColorStop(0.9, "rgba(15,20,22,0)");
+  printFade.addColorStop(1, `rgba(15,20,22,${0.12 * strength})`);
+  ctx.save();
   ctx.fillStyle = printFade;
   ctx.fillRect(0, 0, width, height);
+  ctx.restore();
   addVerticalFilmDate(ctx, width, height, strength);
 }
 
@@ -1279,36 +1785,27 @@ function addDateStamp(ctx, width, height) {
 }
 
 function addPixelEffects(ctx, width, height, preset, strength, grain, seed) {
-  if (grain <= 0 && preset !== "analog" && preset !== "ccd") return;
+  if (preset !== "analog") {
+    addFilmGrain(ctx, width, height, grain * 0.42, seed, grainSizeFor(width, height));
+    return;
+  }
   const imageData = ctx.getImageData(0, 0, width, height);
   const source = new Uint8ClampedArray(imageData.data);
   const data = imageData.data;
   const random = mulberry32(seed);
-  const grainAmount = grain * (preset === "analog" ? 64 : 46);
+  const grainAmount = grain * 64;
   const shift = Math.max(1, Math.round(width * 0.004 * strength));
 
   for (let y = 0; y < height; y += 1) {
-    const tvJitter = preset === "analog" && random() > 0.985 ? Math.round((random() - 0.5) * width * 0.035 * strength) : 0;
+    const tvJitter = random() > 0.985 ? Math.round((random() - 0.5) * width * 0.035 * strength) : 0;
     for (let x = 0; x < width; x += 1) {
       const index = (y * width + x) * 4;
       const noise = (random() - 0.5) * grainAmount;
-
-      if (preset === "analog") {
-        const redX = clamp(x + shift + tvJitter, 0, width - 1);
-        const blueX = clamp(x - shift + tvJitter, 0, width - 1);
-        data[index] = clamp(source[(y * width + redX) * 4] + noise);
-        data[index + 1] = clamp(source[index + 1] + noise * 0.72);
-        data[index + 2] = clamp(source[(y * width + blueX) * 4 + 2] + noise);
-      } else {
-        data[index] = clamp(data[index] + noise);
-        data[index + 1] = clamp(data[index + 1] + noise);
-        data[index + 2] = clamp(data[index + 2] + noise);
-      }
-
-      if (preset === "ccd") {
-        data[index] = clamp(data[index] - 7 * strength);
-        data[index + 2] = clamp(data[index + 2] + 15 * strength);
-      }
+      const redX = clamp(x + shift + tvJitter, 0, width - 1);
+      const blueX = clamp(x - shift + tvJitter, 0, width - 1);
+      data[index] = clamp(source[(y * width + redX) * 4] + noise);
+      data[index + 1] = clamp(source[index + 1] + noise * 0.72);
+      data[index + 2] = clamp(source[(y * width + blueX) * 4 + 2] + noise);
     }
   }
   ctx.putImageData(imageData, 0, 0);
@@ -1327,16 +1824,30 @@ function stickerBaseScale(sticker) {
   return sticker?.group === "pixel" ? 0.2 : 0.18;
 }
 
-function initializeStickerAssets() {
-  stickerCatalog.forEach((sticker) => {
-    const image = new Image();
-    image.decoding = "async";
-    image.onload = () => {
-      if (state.image && state.stickers.some((item) => item.assetId === sticker.id)) scheduleRender();
-    };
-    image.src = stickerDataUrl(sticker.svg);
-    stickerAssets.set(sticker.id, image);
-  });
+function stickerSource(sticker) {
+  if (sticker.svg) return stickerDataUrl(sticker.svg);
+  if (sticker.file) return `${sticker.file}?v=${assetVersion}`;
+  return sticker.src;
+}
+
+// Built-in stickers load on first use, so opening the site doesn't pull every pack.
+function stickerAsset(definition) {
+  let image = stickerAssets.get(definition.id);
+  if (image) return image;
+  image = new Image();
+  image.decoding = "async";
+  image.onload = () => {
+    if (state.image && state.stickers.some((item) => item.assetId === definition.id)) scheduleRender();
+  };
+  if (definition.file) {
+    image.onerror = () => showToast(`스티커 파일을 찾지 못했어요: ${definition.file}`);
+  }
+  image.src = stickerSource(definition);
+  stickerAssets.set(definition.id, image);
+  return image;
+}
+
+function initializeStickerTray() {
   renderStickerTray();
   updateStickerUI();
 }
@@ -1361,7 +1872,7 @@ function renderStickerTray() {
     button.setAttribute("aria-label", `${sticker.label} 추가`);
     button.disabled = !state.image;
     const image = document.createElement("img");
-    image.src = sticker.src || stickerDataUrl(sticker.svg);
+    image.src = stickerSource(sticker);
     image.alt = "";
     image.loading = "eager";
     button.append(image);
@@ -1545,7 +2056,7 @@ function drawStickers(ctx, width, height, showSelection) {
   const previousSmoothing = ctx.imageSmoothingEnabled;
   state.stickers.forEach((sticker) => {
     const definition = stickerDefinitions.get(sticker.assetId);
-    const asset = stickerAssets.get(sticker.assetId);
+    const asset = definition && stickerAsset(definition);
     if (!definition || !asset?.complete || !asset.naturalWidth) return;
     const dimensions = stickerPixelDimensions(sticker, width, height);
     ctx.save();
@@ -1941,6 +2452,76 @@ function updateVnUI() {
   setNormalizedRangeFill(elements.vnCharacterX);
 }
 
+function updateDxFontDialog() {
+  const status = movieFonts.dx;
+  let text = "이 기기에서 찾는 중…";
+  if (movieFonts.dxNotice) text = movieFonts.dxNotice;
+  else if (status === "file") text = `불러온 파일 사용 중 · ${movieFonts.dxFileName}`;
+  else if (status === "local") text = "PC에 설치됨 · 바로 쓸 수 있어요";
+  else if (status === "missing") text = "이 기기에 없음 · 지금은 IM혜민체로 표시";
+  elements.dxFontState.textContent = text;
+  if (movieFonts.dxNotice) elements.dxFontState.dataset.state = "error";
+  else elements.dxFontState.dataset.state = status === "file" || status === "local" ? "ready" : status;
+  elements.loadMovieFont.textContent = status === "file" ? "다른 파일 불러오기" : "글꼴 파일 불러오기";
+  elements.clearMovieFont.hidden = status !== "file";
+}
+
+function openDxFontDialog() {
+  movieFonts.dxNotice = "";
+  ensureDxFont();
+  updateDxFontDialog();
+  const dialog = elements.dxFontDialog;
+  if (dialog.open) return;
+  if (typeof dialog.showModal === "function") dialog.showModal();
+  else dialog.setAttribute("open", "");
+}
+
+function closeDxFontDialog() {
+  const dialog = elements.dxFontDialog;
+  if (!dialog.open) return;
+  if (typeof dialog.close === "function") dialog.close();
+  else dialog.removeAttribute("open");
+}
+
+function updateMovieUI() {
+  elements.movieTools.hidden = !state.movieFrame;
+  elements.movieFrameButtons.forEach((item) => {
+    const selected = item.dataset.movieFrame === (state.movieFrame ? "on" : "off");
+    item.classList.toggle("is-selected", selected);
+    item.setAttribute("aria-pressed", String(selected));
+  });
+  elements.movieFontButtons.forEach((item) => {
+    const selected = item.dataset.movieFont === state.movieFont;
+    item.classList.toggle("is-selected", selected);
+    item.setAttribute("aria-pressed", String(selected));
+  });
+  elements.moviePositionButtons.forEach((item) => {
+    const selected = item.dataset.moviePosition === state.moviePosition;
+    item.classList.toggle("is-selected", selected);
+    item.setAttribute("aria-pressed", String(selected));
+  });
+  elements.movieColorButtons.forEach((item) => {
+    item.setAttribute("aria-pressed", String(item.dataset.movieColor === state.movieTextColor));
+  });
+  elements.movieTextColor.value = state.movieTextColor;
+  elements.movieTextSize.value = String(Math.round(state.movieTextScale * 100));
+  elements.movieTextSizeValue.textContent = `${Math.round(state.movieTextScale * 100)}%`;
+  elements.movieBarSize.value = String(Math.round(state.movieBarSize * 100));
+  elements.movieBarSizeValue.textContent = `${Math.round(state.movieBarSize * 100)}%`;
+  setNormalizedRangeFill(elements.movieTextSize);
+  setNormalizedRangeFill(elements.movieBarSize);
+  elements.movieFontInfo.classList.toggle("has-alert", state.movieFont === "dx" && movieFonts.dx === "missing");
+  updateDxFontDialog();
+}
+
+function updateFilterAdjustUI() {
+  const noFilter = state.filter === "none";
+  [elements.strengthRange, elements.grainRange].forEach((input) => {
+    input.disabled = noFilter;
+    input.closest(".range-control").classList.toggle("is-disabled", noFilter);
+  });
+}
+
 function releaseVnAsset(asset) {
   if (!asset) return;
   URL.revokeObjectURL(asset.url);
@@ -1987,6 +2568,7 @@ function loadVnAsset(file, kind) {
     }
     updateVnUI();
     scheduleRender();
+    if (kind === "background") scheduleFilterThumbnails();
     showToast(kind === "background" ? "미연시 배경을 불러왔어요." : "누끼 캐릭터를 불러왔어요.");
   };
   image.onerror = () => {
@@ -2388,18 +2970,20 @@ function patternPhaseRadians() {
 }
 
 function applySelectedFilter(ctx, canvas, width, height, seed = state.seed, animationPhase = 0) {
+  if (state.filter === "none") return;
   const phase = patternPhaseRadians() + animationPhase;
 
   if (state.filter === "softcam") {
-    addBloom(ctx, canvas, width, height, state.strength, "#ffeef5");
-    addColorWash(ctx, width, height, "#f6c9d6", 0.055 * state.strength, "screen");
-    addVignette(ctx, width, height, 0.12 * state.strength);
+    applyLook(ctx, width, height, filterLooks.softcam, state.strength);
+    addGlow(ctx, width, height, { threshold: 0.68, radius: 0.014, amount: 0.38, tint: [255, 236, 240] }, state.strength);
+    addVignette(ctx, width, height, 0.08 * state.strength);
   }
 
   if (state.filter === "y2k") {
-    addColorWash(ctx, width, height, "#d8a72d", 0.2 * state.strength, "color");
-    addFlash(ctx, width, height, 0.42 * state.strength);
-    addVignette(ctx, width, height, 0.32 * state.strength);
+    applyLook(ctx, width, height, filterLooks.y2k, state.strength);
+    addGlow(ctx, width, height, { threshold: 0.78, radius: 0.01, amount: 0.3, tint: [255, 214, 160] }, state.strength);
+    // flash fall-off comes from darker corners, not a painted spot of light
+    addVignette(ctx, width, height, 0.36 * state.strength);
   }
 
   if (state.filter === "analog") {
@@ -2408,15 +2992,16 @@ function applySelectedFilter(ctx, canvas, width, height, seed = state.seed, anim
   }
 
   if (state.filter === "disposable") {
-    addFlash(ctx, width, height, state.strength);
-    addColorWash(ctx, width, height, "#e77b4d", 0.07 * state.strength, "color");
-    addVignette(ctx, width, height, 0.48 * state.strength);
+    applyLook(ctx, width, height, filterLooks.disposable, state.strength);
+    addGlow(ctx, width, height, { threshold: 0.8, radius: 0.008, amount: 0.35, tint: [255, 120, 80] }, state.strength);
+    addVignette(ctx, width, height, 0.5 * state.strength);
+    addFilmGrain(ctx, width, height, 0.16 * state.strength, seed + 7, grainSizeFor(width, height) * 1.4);
   }
 
   if (state.filter === "ccd") {
-    addBloom(ctx, canvas, width, height, state.strength * 0.58, "#c7dcff");
-    addColorWash(ctx, width, height, "#527cbe", 0.12 * state.strength, "color");
-    addVignette(ctx, width, height, 0.22 * state.strength);
+    applyLook(ctx, width, height, filterLooks.ccd, state.strength);
+    addGlow(ctx, width, height, { threshold: 0.74, radius: 0.009, amount: 0.5, tint: [200, 225, 255] }, state.strength);
+    addVignette(ctx, width, height, 0.16 * state.strength);
   }
 
   if (state.filter === "liquify") {
@@ -2446,11 +3031,11 @@ function applySelectedFilter(ctx, canvas, width, height, seed = state.seed, anim
   if (state.filter === "xerox") applyXerox(ctx, width, height, state.strength, seed);
   if (state.filter === "riso") applyRiso(ctx, width, height, state.strength);
   if (state.filter === "comic") applyComic(ctx, width, height, state.strength);
-  if (state.filter === "holo") applyHoloDream(ctx, width, height, state.strength);
+  if (state.filter === "dreamcore") applyDreamcore(ctx, width, height, state.strength);
   if (state.filter === "pixel") applyPixelate(ctx, width, height, state.strength);
-  if (state.filter === "summerfilm") applySummerFilm(ctx, width, height, state.strength);
-  if (state.filter === "faded") applyFadedMemory(ctx, width, height, state.strength);
-  if (state.filter === "softglow") applySoftGlow(ctx, width, height, state.strength, animationPhase);
+  if (state.filter === "summerfilm") applySummerFilm(ctx, width, height, state.strength, seed);
+  if (state.filter === "faded") applyFadedMemory(ctx, width, height, state.strength, seed);
+  if (state.filter === "softglow") applySoftGlow(ctx, width, height, state.strength);
   if (state.filter === "heartbokeh") applyHeartBokeh(ctx, width, height, state.strength, seed, animationPhase);
   if (state.filter === "milkyveil") applyMilkyVeil(ctx, width, height, state.strength);
   if (state.filter === "hearttunnel") applyHeartTunnel(ctx, width, height, state.strength);
@@ -2913,6 +3498,7 @@ function renderFilmFrame(image, width, height, seed, originalOnly = false, anima
   drawImageCover(ctx, image, 0, 0, width, height);
   ctx.filter = "none";
   if (!originalOnly) applySelectedFilter(ctx, canvas, width, height, seed, animationPhase);
+  drawMovieFrame(ctx, width, height);
   return canvas;
 }
 
@@ -3051,6 +3637,76 @@ function drawVnDialogue(ctx, width, height) {
   ctx.lineTo(markerX + marker * 0.5, markerY + marker);
   ctx.closePath();
   ctx.fill();
+  ctx.restore();
+}
+
+function wrapMovieSubtitle(ctx, text, maxWidth, maxLines = 6) {
+  const lines = [];
+  String(text || "").replace(/\r\n?/g, "\n").split("\n").forEach((paragraph) => {
+    let line = "";
+    for (const character of [...paragraph]) {
+      const candidate = line + character;
+      if (!line || ctx.measureText(candidate).width <= maxWidth) {
+        line = candidate;
+        continue;
+      }
+      // Break between words like real subtitles, unless that would strand a tiny head such as "-".
+      const breakAt = line.lastIndexOf(" ");
+      if (breakAt > 0 && ctx.measureText(line.slice(0, breakAt)).width >= maxWidth * 0.4) {
+        lines.push(line.slice(0, breakAt).trimEnd());
+        line = `${line.slice(breakAt + 1)}${character}`.trimStart();
+      } else {
+        lines.push(line.trimEnd());
+        line = character.trimStart();
+      }
+    }
+    lines.push(line.trimEnd());
+  });
+  while (lines.length && !lines[0].trim()) lines.shift();
+  while (lines.length && !lines.at(-1).trim()) lines.pop();
+  return lines.slice(0, maxLines);
+}
+
+function drawMovieFrame(ctx, width, height) {
+  if (!state.movieFrame) return;
+  const barHeight = Math.round(height * state.movieBarSize);
+  ctx.save();
+  if (barHeight > 0) {
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, width, barHeight);
+    ctx.fillRect(0, height - barHeight, width, barHeight);
+  }
+
+  // Sized from the reference still (850×531, 8% bars): about 29px text, 1.24 line pitch,
+  // sitting roughly one line above the bottom bar. Width caps it so portrait photos don't wrap early.
+  const fontSize = Math.max(10, Math.round(Math.min(width * 0.034, height * 0.056) * state.movieTextScale));
+  // Weight stays 400: faking bold on DX영화자막 leaves holes where its contours overlap.
+  ctx.font = `400 ${fontSize}px ${movieFontStack()}`;
+  const lines = wrapMovieSubtitle(ctx, state.movieSubtitle, width * 0.9);
+  if (lines.length) {
+    const lineHeight = fontSize * 1.24;
+    const blockHeight = fontSize + lineHeight * (lines.length - 1);
+    let blockBottom;
+    if (state.moviePosition === "bar" && barHeight > 0) {
+      blockBottom = Math.min(height - barHeight / 2 + blockHeight / 2, height - fontSize * 0.35);
+    } else {
+      const gap = barHeight > 0 ? fontSize * 0.8 : Math.max(fontSize * 0.8, height * 0.055);
+      blockBottom = height - barHeight - gap;
+    }
+    const firstLineY = blockBottom - blockHeight + fontSize / 2;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = "rgba(0,0,0,.86)";
+    ctx.lineWidth = Math.max(1.5, fontSize * 0.13);
+    ctx.shadowColor = "rgba(0,0,0,.55)";
+    ctx.shadowBlur = Math.max(2, fontSize * 0.16);
+    ctx.shadowOffsetY = Math.max(1, fontSize * 0.04);
+    lines.forEach((line, index) => ctx.strokeText(line, width / 2, firstLineY + index * lineHeight));
+    ctx.shadowColor = "transparent";
+    ctx.fillStyle = state.movieTextColor;
+    lines.forEach((line, index) => ctx.fillText(line, width / 2, firstLineY + index * lineHeight));
+  }
   ctx.restore();
 }
 
@@ -3318,155 +3974,449 @@ function composeXpDesktop(canvas, width, height) {
   ctx.fillText("8:52 PM", width * 0.93, taskbarY + taskbarHeight * 0.52);
 }
 
-function drawCameraUiLayer(ctx, width, height, language) {
-  const top = height * 0.15;
-  const bottom = height * 0.25;
-  const viewportBottom = height - bottom;
-  const lineWidth = Math.max(1, Math.min(width, height) * 0.0022);
-  ctx.save();
-  ctx.fillStyle = "rgba(2,3,6,0.7)";
-  ctx.fillRect(0, 0, width, top);
-  ctx.fillRect(0, viewportBottom, width, bottom);
-  ctx.strokeStyle = "rgba(235,239,243,0.38)";
-  ctx.lineWidth = lineWidth;
-  for (let index = 1; index < 3; index += 1) {
-    const x = width * index / 3;
-    const y = top + (viewportBottom - top) * index / 3;
-    ctx.beginPath();
-    ctx.moveTo(x, top);
-    ctx.lineTo(x, viewportBottom);
-    ctx.moveTo(0, y);
-    ctx.lineTo(width, y);
-    ctx.stroke();
-  }
+const iosYellow = "#ffd60a";
+const cameraUiFont = '"Filter2000 Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", "Segoe UI", sans-serif';
 
-  const uiSize = Math.max(11, Math.round(Math.min(width, height) * 0.026));
-  ctx.font = `700 ${uiSize}px Arial, sans-serif`;
-  ctx.fillStyle = "rgba(255,255,255,0.92)";
-  ctx.textBaseline = "middle";
-  ctx.textAlign = "left";
-  ctx.fillText("⚡", width * 0.05, top * 0.48);
-  ctx.fillText("HDR", width * 0.18, top * 0.48);
-  ctx.textAlign = "right";
-  ctx.fillText("AUTO", width * 0.95, top * 0.48);
-
-  const focusX = width * 0.5;
-  const focusY = top + (viewportBottom - top) * 0.5;
-  const focusSize = Math.min(width, height) * 0.045;
-  ctx.strokeStyle = "rgba(245,209,91,0.9)";
-  ctx.lineWidth = Math.max(1.5, lineWidth * 1.4);
+function drawIosFlashIcon(ctx, cx, cy, s) {
+  ctx.lineWidth = 1.6 * s;
   ctx.beginPath();
-  ctx.moveTo(focusX - focusSize, focusY);
-  ctx.lineTo(focusX + focusSize, focusY);
-  ctx.moveTo(focusX, focusY - focusSize);
-  ctx.lineTo(focusX, focusY + focusSize);
+  ctx.arc(cx, cy, 13 * s, 0, Math.PI * 2);
   ctx.stroke();
-
-  const labels = language === "ko"
-    ? ["슬로모션", "비디오", "사진", "인물", "파노라마"]
-    : ["SLO-MO", "VIDEO", "PHOTO", "PORTRAIT", "PANO"];
-  const selectedIndex = 2;
-  ctx.font = `700 ${Math.max(9, Math.round(uiSize * 0.72))}px Arial, sans-serif`;
-  ctx.textAlign = "center";
-  labels.forEach((label, index) => {
-    const x = width * (0.1 + index * 0.2);
-    ctx.fillStyle = index === selectedIndex ? "#f1ca57" : "rgba(255,255,255,0.78)";
-    ctx.fillText(label, x, viewportBottom + bottom * 0.24);
-  });
-
-  const shutterY = viewportBottom + bottom * 0.68;
-  const shutterRadius = Math.min(width, height) * 0.074;
-  ctx.fillStyle = "#f7f7f7";
-  ctx.strokeStyle = "#ffffff";
-  ctx.lineWidth = Math.max(3, lineWidth * 2.4);
   ctx.beginPath();
-  ctx.arc(width * 0.5, shutterY, shutterRadius, 0, Math.PI * 2);
+  ctx.moveTo(cx + 1.6 * s, cy - 7.8 * s);
+  ctx.lineTo(cx - 4.6 * s, cy + 1.2 * s);
+  ctx.lineTo(cx - 0.3 * s, cy + 1.2 * s);
+  ctx.lineTo(cx - 1.6 * s, cy + 7.8 * s);
+  ctx.lineTo(cx + 4.6 * s, cy - 1.2 * s);
+  ctx.lineTo(cx + 0.3 * s, cy - 1.2 * s);
+  ctx.closePath();
   ctx.fill();
-  ctx.stroke();
-  ctx.strokeStyle = "#101116";
-  ctx.lineWidth = Math.max(1, lineWidth);
-  ctx.beginPath();
-  ctx.arc(width * 0.5, shutterY, shutterRadius * 0.84, 0, Math.PI * 2);
-  ctx.stroke();
+}
 
-  ctx.strokeStyle = "rgba(255,255,255,0.86)";
+function drawIosLiveIcon(ctx, cx, cy, s) {
+  ctx.save();
+  ctx.strokeStyle = iosYellow;
+  ctx.fillStyle = iosYellow;
+  ctx.lineWidth = 1.5 * s;
+  ctx.setLineDash([1.4 * s, 2.3 * s]);
   ctx.beginPath();
-  ctx.arc(width * 0.86, shutterY, shutterRadius * 0.72, 0, Math.PI * 2);
+  ctx.arc(cx, cy, 12.5 * s, 0, Math.PI * 2);
   ctx.stroke();
-  ctx.fillStyle = "rgba(255,255,255,0.86)";
-  ctx.font = `700 ${Math.max(12, Math.round(uiSize * 1.1))}px Arial, sans-serif`;
-  ctx.fillText("↻", width * 0.86, shutterY);
+  ctx.setLineDash([]);
+  ctx.lineWidth = 1.7 * s;
+  ctx.beginPath();
+  ctx.arc(cx, cy, 8 * s, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(cx, cy, 3.8 * s, 0, Math.PI * 2);
+  ctx.fill();
   ctx.restore();
 }
 
-function drawDigicamUiLayer(ctx, width, height) {
-  const minSide = Math.min(width, height);
-  const inset = minSide * 0.044;
-  const unit = Math.max(1.5, minSide * 0.0032);
-  const typeSize = Math.max(11, Math.round(minSide * 0.03));
+function drawIosChevron(ctx, cx, cy, s, pointRight = false) {
   ctx.save();
-  ctx.lineCap = "square";
-  ctx.lineJoin = "miter";
-  ctx.lineWidth = unit;
-  ctx.strokeStyle = "rgba(255,255,255,.96)";
-  ctx.fillStyle = "rgba(255,255,255,.96)";
-  ctx.shadowColor = "rgba(0,0,0,.78)";
-  ctx.shadowBlur = unit * 1.6;
-  ctx.shadowOffsetX = unit * 0.65;
-  ctx.shadowOffsetY = unit * 0.65;
-  ctx.font = `700 ${typeSize}px "Mona12", "Courier New", monospace`;
-  ctx.textBaseline = "top";
-  ctx.textAlign = "left";
-
-  ctx.fillText("3M", inset, inset);
-  ctx.font = `400 ${Math.max(9, Math.round(typeSize * 0.68))}px "Mona12", "Courier New", monospace`;
-  ctx.fillText("FINE", inset, inset + typeSize * 1.15);
-  ctx.fillText("ISO AUTO", inset, inset + typeSize * 2.05);
-
-  const batteryWidth = minSide * 0.1;
-  const batteryHeight = batteryWidth * 0.42;
-  const batteryX = width - inset - batteryWidth;
-  const batteryY = inset;
-  ctx.strokeRect(batteryX, batteryY, batteryWidth, batteryHeight);
-  ctx.fillRect(batteryX + batteryWidth, batteryY + batteryHeight * 0.27, unit * 2, batteryHeight * 0.46);
-  ctx.fillRect(batteryX + unit * 1.4, batteryY + unit * 1.4, batteryWidth * 0.68, batteryHeight - unit * 2.8);
-
-  ctx.textAlign = "right";
-  ctx.fillText("100-0024", width - inset, batteryY + batteryHeight + typeSize * 0.42);
-  ctx.fillText("SD", width - inset, height - inset - typeSize);
-
-  const focusWidth = width * 0.22;
-  const focusHeight = height * 0.2;
-  const focusX = width * 0.5 - focusWidth * 0.5;
-  const focusY = height * 0.5 - focusHeight * 0.5;
-  const corner = Math.min(focusWidth, focusHeight) * 0.24;
+  ctx.translate(cx, cy);
+  if (pointRight) ctx.rotate(Math.PI / 2);
+  ctx.lineWidth = 2.2 * s;
   ctx.beginPath();
-  ctx.moveTo(focusX, focusY + corner);
-  ctx.lineTo(focusX, focusY);
-  ctx.lineTo(focusX + corner, focusY);
-  ctx.moveTo(focusX + focusWidth - corner, focusY);
-  ctx.lineTo(focusX + focusWidth, focusY);
-  ctx.lineTo(focusX + focusWidth, focusY + corner);
-  ctx.moveTo(focusX + focusWidth, focusY + focusHeight - corner);
-  ctx.lineTo(focusX + focusWidth, focusY + focusHeight);
-  ctx.lineTo(focusX + focusWidth - corner, focusY + focusHeight);
-  ctx.moveTo(focusX + corner, focusY + focusHeight);
-  ctx.lineTo(focusX, focusY + focusHeight);
-  ctx.lineTo(focusX, focusY + focusHeight - corner);
+  ctx.moveTo(-7 * s, 3.2 * s);
+  ctx.lineTo(0, -3.2 * s);
+  ctx.lineTo(7 * s, 3.2 * s);
   ctx.stroke();
+  ctx.restore();
+}
 
-  ctx.fillStyle = "rgba(145,255,91,.96)";
-  ctx.fillRect(focusX + focusWidth * 0.47, focusY + focusHeight * 0.45, focusWidth * 0.06, focusHeight * 0.1);
-  ctx.fillStyle = "rgba(255,255,255,.96)";
-  ctx.textAlign = "left";
-  ctx.fillText("⚡ AUTO", inset, height - inset - typeSize);
+function drawIosFocus(ctx, cx, cy, s) {
+  const half = 36 * s;
+  ctx.save();
+  ctx.strokeStyle = iosYellow;
+  ctx.fillStyle = iosYellow;
+  ctx.lineWidth = 1.3 * s;
+  ctx.strokeRect(cx - half, cy - half, half * 2, half * 2);
+  ctx.beginPath();
+  [[0, -1], [0, 1], [-1, 0], [1, 0]].forEach(([dx, dy]) => {
+    ctx.moveTo(cx + dx * half, cy + dy * half);
+    ctx.lineTo(cx + dx * (half - 6 * s), cy + dy * (half - 6 * s));
+  });
+  ctx.stroke();
+  // exposure "sun" slider beside the box
+  const sunX = cx + half + 17 * s;
+  ctx.beginPath();
+  ctx.moveTo(sunX, cy - half);
+  ctx.lineTo(sunX, cy - 11 * s);
+  ctx.moveTo(sunX, cy + 11 * s);
+  ctx.lineTo(sunX, cy + half);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(sunX, cy, 4 * s, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  for (let ray = 0; ray < 8; ray += 1) {
+    const a = ray * Math.PI / 4;
+    ctx.moveTo(sunX + Math.cos(a) * 6.3 * s, cy + Math.sin(a) * 6.3 * s);
+    ctx.lineTo(sunX + Math.cos(a) * 8.6 * s, cy + Math.sin(a) * 8.6 * s);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawIosZoom(ctx, cx, cy, s, vertical = false) {
+  [[".5", 13], ["1×", 17], ["2", 13]].forEach(([label, radius], index) => {
+    const offset = (index - 1) * 40 * s;
+    const x = vertical ? cx : cx + offset;
+    const y = vertical ? cy + offset : cy;
+    ctx.fillStyle = "rgba(0,0,0,.42)";
+    ctx.beginPath();
+    ctx.arc(x, y, radius * s, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = index === 1 ? iosYellow : "#fff";
+    ctx.font = `600 ${(index === 1 ? 12.5 : 11.5) * s}px ${cameraUiFont}`;
+    ctx.fillText(label, x, y + 0.5 * s);
+  });
+}
+
+function drawIosModes(ctx, cx, cy, labels, selected, s, english, vertical = false) {
+  ctx.save();
+  ctx.font = `600 ${(english ? 12.5 : 13.5) * s}px ${cameraUiFont}`;
+  ctx.letterSpacing = english ? `${1.1 * s}px` : "0px";
+  const widths = labels.map((label) => ctx.measureText(label).width);
+  const gap = (english ? 19 : 21) * s;
+  const positions = [];
+  positions[selected] = vertical ? cy : cx;
+  for (let i = selected - 1; i >= 0; i -= 1) {
+    positions[i] = positions[i + 1] - (vertical ? 27 * s : widths[i + 1] / 2 + gap + widths[i] / 2);
+  }
+  for (let i = selected + 1; i < labels.length; i += 1) {
+    positions[i] = positions[i - 1] + (vertical ? 27 * s : widths[i - 1] / 2 + gap + widths[i] / 2);
+  }
+  labels.forEach((label, i) => {
+    // the vertical list fades toward its ends like a scrolling wheel
+    const fade = vertical ? Math.max(0.28, 0.93 - Math.abs(i - selected) * 0.2) : 0.93;
+    ctx.fillStyle = i === selected ? iosYellow : `rgba(255,255,255,${fade})`;
+    ctx.fillText(label, vertical ? cx : positions[i], vertical ? positions[i] : cy);
+  });
+  ctx.restore();
+}
+
+function drawIosShutter(ctx, cx, cy, s) {
+  ctx.strokeStyle = "#fff";
+  ctx.fillStyle = "#fff";
+  ctx.lineWidth = 4.4 * s;
+  ctx.beginPath();
+  ctx.arc(cx, cy, 36.5 * s, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(cx, cy, 30.5 * s, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawIosThumbnail(ctx, cx, cy, s, source) {
+  const size = 46 * s;
+  ctx.save();
+  roundedRectPath(ctx, cx - size / 2, cy - size / 2, size, size, 8 * s);
+  ctx.clip();
+  ctx.fillStyle = "#2a2a2e";
+  ctx.fillRect(cx - size / 2, cy - size / 2, size, size);
+  if (source) drawImageCover(ctx, source, cx - size / 2, cy - size / 2, size, size);
+  ctx.restore();
+  ctx.strokeStyle = "rgba(255,255,255,.28)";
+  ctx.lineWidth = s;
+  roundedRectPath(ctx, cx - size / 2, cy - size / 2, size, size, 8 * s);
+  ctx.stroke();
+}
+
+function drawIosFlipButton(ctx, cx, cy, s) {
+  ctx.fillStyle = "rgba(255,255,255,.17)";
+  ctx.beginPath();
+  ctx.arc(cx, cy, 23 * s, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "#fff";
+  ctx.fillStyle = "#fff";
+  ctx.lineWidth = 1.9 * s;
+  const radius = 9.5 * s;
+  [[Math.PI * 1.08, Math.PI * 1.9], [Math.PI * 0.08, Math.PI * 0.9]].forEach(([start, end]) => {
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, start, end);
+    ctx.stroke();
+    const px = cx + Math.cos(end) * radius;
+    const py = cy + Math.sin(end) * radius;
+    const tx = -Math.sin(end);
+    const ty = Math.cos(end);
+    const nx = Math.cos(end);
+    const ny = Math.sin(end);
+    ctx.beginPath();
+    ctx.moveTo(px + tx * 3.6 * s, py + ty * 3.6 * s);
+    ctx.lineTo(px - tx * 1.4 * s + nx * 3.4 * s, py - ty * 1.4 * s + ny * 3.4 * s);
+    ctx.lineTo(px - tx * 1.4 * s - nx * 3.4 * s, py - ty * 1.4 * s - ny * 3.4 * s);
+    ctx.closePath();
+    ctx.fill();
+  });
+}
+
+function drawIosGrid(ctx, x0, y0, x1, y1, s) {
+  ctx.save();
+  ctx.strokeStyle = "rgba(255,255,255,.3)";
+  ctx.lineWidth = Math.max(1, 0.8 * s);
+  ctx.beginPath();
+  for (let i = 1; i < 3; i += 1) {
+    const x = x0 + (x1 - x0) * i / 3;
+    const y = y0 + (y1 - y0) * i / 3;
+    ctx.moveTo(x, y0);
+    ctx.lineTo(x, y1);
+    ctx.moveTo(x0, y);
+    ctx.lineTo(x1, y);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+// iPhone camera screen. Sizes are iOS points: `s` maps 1pt to pixels (390pt across the short side).
+function drawCameraUiLayer(ctx, width, height, language, source) {
+  const english = language === "en";
+  const labels = english
+    ? ["TIME-LAPSE", "SLO-MO", "CINEMATIC", "VIDEO", "PHOTO", "PORTRAIT", "PANO"]
+    : ["타임랩스", "슬로모션", "시네마틱", "비디오", "사진", "인물", "파노라마"];
+  const selected = 4;
+  ctx.save();
   ctx.textAlign = "center";
-  ctx.fillText("W  ━━━━━  T", width * 0.5, height - inset - typeSize);
+  ctx.textBaseline = "middle";
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
 
-  const dateText = state.dateValue.replaceAll("-", ".");
-  ctx.textAlign = "right";
-  ctx.fillStyle = "rgba(255,214,91,.96)";
-  ctx.fillText(dateText, width - inset, height - inset - typeSize * 2.15);
+  if (width <= height * 1.05) {
+    const s = width / 390;
+    const topH = 58 * s;
+    const bottomH = Math.min(height * 0.3, 178 * s);
+    const bottomY = height - bottomH;
+    ctx.fillStyle = "rgba(0,0,0,.5)";
+    ctx.fillRect(0, 0, width, topH);
+    ctx.fillStyle = "rgba(0,0,0,.58)";
+    ctx.fillRect(0, bottomY, width, bottomH);
+    drawIosGrid(ctx, 0, topH, width, bottomY, s);
+    ctx.strokeStyle = "#fff";
+    ctx.fillStyle = "#fff";
+    drawIosFlashIcon(ctx, 34 * s, topH / 2, s);
+    drawIosChevron(ctx, width / 2, topH / 2, s);
+    drawIosLiveIcon(ctx, width - 34 * s, topH / 2, s);
+    drawIosFocus(ctx, width * 0.5, topH + (bottomY - topH) * 0.46, s);
+    drawIosZoom(ctx, width / 2, bottomY - 30 * s, s);
+    drawIosModes(ctx, width / 2, bottomY + 23 * s, labels, selected, s, english);
+    const rowY = bottomY + Math.min(bottomH * 0.64, 104 * s);
+    drawIosThumbnail(ctx, 59 * s, rowY, s, source);
+    drawIosShutter(ctx, width / 2, rowY, s);
+    drawIosFlipButton(ctx, width - 59 * s, rowY, s);
+  } else {
+    const s = height / 390;
+    const leftW = 56 * s;
+    const rightW = Math.min(width * 0.3, 190 * s);
+    const rightX = width - rightW;
+    ctx.fillStyle = "rgba(0,0,0,.5)";
+    ctx.fillRect(0, 0, leftW, height);
+    ctx.fillStyle = "rgba(0,0,0,.58)";
+    ctx.fillRect(rightX, 0, rightW, height);
+    drawIosGrid(ctx, leftW, 0, rightX, height, s);
+    ctx.strokeStyle = "#fff";
+    ctx.fillStyle = "#fff";
+    drawIosFlashIcon(ctx, leftW / 2, 34 * s, s);
+    drawIosChevron(ctx, leftW / 2, height / 2, s, true);
+    drawIosLiveIcon(ctx, leftW / 2, height - 34 * s, s);
+    drawIosFocus(ctx, leftW + (rightX - leftW) * 0.46, height * 0.5, s);
+    drawIosZoom(ctx, leftW + (rightX - leftW) / 2, height - 34 * s, s);
+    const shutterX = width - Math.min(62 * s, rightW * 0.36);
+    drawIosModes(ctx, rightX + (shutterX - 37 * s - rightX) / 2, height / 2, labels, selected, s * 0.92, english, true);
+    drawIosFlipButton(ctx, shutterX, height / 2 - 104 * s, s);
+    drawIosShutter(ctx, shutterX, height / 2, s);
+    drawIosThumbnail(ctx, shutterX, height / 2 + 104 * s, s, source);
+  }
+  ctx.restore();
+}
+
+const sevenSegmentDigits = {
+  0: "abcdef", 1: "bc", 2: "abdeg", 3: "abcdg", 4: "bcfg",
+  5: "acdfg", 6: "acdefg", 7: "abc", 8: "abcdefg", 9: "abcdfg",
+};
+
+function drawSevenSegmentText(ctx, text, rightX, bottomY, height, color) {
+  const digitWidth = height * 0.52;
+  const thick = height * 0.14;
+  const gap = height * 0.24;
+  const advance = (ch) => (ch === " " ? digitWidth * 0.55 : ch === "'" ? thick * 2.4 : digitWidth + gap);
+  const total = [...text].reduce((sum, ch) => sum + advance(ch), 0) - gap;
+  const top = bottomY - height;
+  const segment = (x1, y1, x2, y2) => {
+    const length = Math.hypot(x2 - x1, y2 - y1);
+    const dx = (x2 - x1) / length;
+    const dy = (y2 - y1) / length;
+    const nx = -dy;
+    const ny = dx;
+    const inset = thick * 0.16;
+    const half = thick / 2;
+    ctx.moveTo(x1 + dx * inset, y1 + dy * inset);
+    ctx.lineTo(x1 + dx * (inset + half) + nx * half, y1 + dy * (inset + half) + ny * half);
+    ctx.lineTo(x2 - dx * (inset + half) + nx * half, y2 - dy * (inset + half) + ny * half);
+    ctx.lineTo(x2 - dx * inset, y2 - dy * inset);
+    ctx.lineTo(x2 - dx * (inset + half) - nx * half, y2 - dy * (inset + half) - ny * half);
+    ctx.lineTo(x1 + dx * (inset + half) - nx * half, y1 + dy * (inset + half) - ny * half);
+    ctx.closePath();
+  };
+  ctx.save();
+  // slanted like a real LCD date imprint
+  ctx.transform(1, 0, -0.1, 1, bottomY * 0.1, 0);
+  ctx.fillStyle = color;
+  ctx.shadowColor = color;
+  ctx.shadowBlur = height * 0.28;
+  let x = rightX - total;
+  ctx.beginPath();
+  for (const ch of text) {
+    if (ch === "'") {
+      segment(x + thick * 0.6, top, x + thick * 0.6, top + height * 0.32);
+    } else if (sevenSegmentDigits[ch]) {
+      const l = x + thick / 2;
+      const r = x + digitWidth - thick / 2;
+      const t = top + thick / 2;
+      const m = top + height / 2;
+      const b = top + height - thick / 2;
+      const lines = { a: [l, t, r, t], b: [r, t, r, m], c: [r, m, r, b], d: [l, b, r, b], e: [l, m, l, b], f: [l, t, l, m], g: [l, m, r, m] };
+      [...sevenSegmentDigits[ch]].forEach((key) => segment(...lines[key]));
+    }
+    x += advance(ch);
+  }
+  ctx.fill();
+  ctx.restore();
+}
+
+// Early-2000s compact camera LCD: outlined white glyphs, AF brackets, battery, orange date imprint.
+function drawDigicamUiLayer(ctx, width, height) {
+  const u = Math.min(width, height) / 100;
+  const inset = 4.4 * u;
+  const typeSize = Math.max(10, Math.round(3.2 * u));
+  const outline = Math.max(2, typeSize * 0.24);
+  const stroke = Math.max(1.2, 0.5 * u);
+  const white = "#f8f8f4";
+  const shade = "rgba(10,12,18,.78)";
+  ctx.save();
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  ctx.font = `700 ${typeSize}px "Mona12", "Courier New", monospace`;
+  ctx.textBaseline = "middle";
+
+  const label = (text, x, y, align = "left") => {
+    ctx.textAlign = align;
+    ctx.lineWidth = outline;
+    ctx.strokeStyle = shade;
+    ctx.strokeText(text, x, y);
+    ctx.fillStyle = white;
+    ctx.fillText(text, x, y);
+  };
+  // every glyph is drawn twice: a dark outline first, then the white line on top
+  const icon = (build, fill = false) => {
+    ctx.beginPath();
+    build();
+    ctx.lineWidth = stroke + outline;
+    ctx.strokeStyle = shade;
+    ctx.stroke();
+    if (fill) {
+      ctx.fillStyle = shade;
+      ctx.fill();
+    }
+    ctx.lineWidth = stroke;
+    ctx.strokeStyle = white;
+    ctx.stroke();
+    if (fill) {
+      ctx.fillStyle = white;
+      ctx.fill();
+    }
+  };
+
+  const rowY = inset + 2 * u;
+  const camX = inset;
+  icon(() => {
+    ctx.rect(camX, rowY - 1.6 * u, 6.4 * u, 4 * u);
+    ctx.moveTo(camX + 1.6 * u, rowY - 1.6 * u);
+    ctx.lineTo(camX + 2.2 * u, rowY - 2.6 * u);
+    ctx.lineTo(camX + 4 * u, rowY - 2.6 * u);
+    ctx.lineTo(camX + 4.6 * u, rowY - 1.6 * u);
+    ctx.moveTo(camX + 4.4 * u, rowY + 0.4 * u);
+    ctx.arc(camX + 3.2 * u, rowY + 0.4 * u, 1.2 * u, 0, Math.PI * 2);
+  });
+  const boltX = camX + 10 * u;
+  icon(() => {
+    ctx.moveTo(boltX + 1.4 * u, rowY - 2.4 * u);
+    ctx.lineTo(boltX - 0.8 * u, rowY + 0.4 * u);
+    ctx.lineTo(boltX + 0.6 * u, rowY + 0.4 * u);
+    ctx.lineTo(boltX - 0.4 * u, rowY + 2.6 * u);
+    ctx.lineTo(boltX + 2 * u, rowY - 0.4 * u);
+    ctx.lineTo(boltX + 0.6 * u, rowY - 0.4 * u);
+    ctx.closePath();
+  }, true);
+  label("A", boltX + 2.4 * u, rowY + 0.2 * u);
+  label("5M", camX + 17.5 * u, rowY + 0.2 * u);
+
+  const batW = 7.6 * u;
+  const batH = 3.6 * u;
+  const batX = width - inset - batW - 0.9 * u;
+  const batY = rowY - batH / 2;
+  icon(() => {
+    ctx.rect(batX, batY, batW, batH);
+    ctx.rect(batX + batW, batY + batH * 0.3, 0.9 * u, batH * 0.4);
+  });
+  ctx.fillStyle = white;
+  for (let bar = 0; bar < 3; bar += 1) {
+    ctx.fillRect(batX + 0.9 * u + bar * 2.2 * u, batY + 0.9 * u, 1.6 * u, batH - 1.8 * u);
+  }
+  label("[ 128 ]", width - inset, rowY + 5.2 * u, "right");
+
+  const frameW = Math.min(width * 0.26, 34 * u);
+  const frameH = Math.min(height * 0.24, 26 * u);
+  const fx = width / 2 - frameW / 2;
+  const fy = height / 2 - frameH / 2;
+  const arm = Math.min(frameW, frameH) * 0.26;
+  icon(() => {
+    ctx.moveTo(fx, fy + arm);
+    ctx.lineTo(fx, fy);
+    ctx.lineTo(fx + arm, fy);
+    ctx.moveTo(fx + frameW - arm, fy);
+    ctx.lineTo(fx + frameW, fy);
+    ctx.lineTo(fx + frameW, fy + arm);
+    ctx.moveTo(fx + frameW, fy + frameH - arm);
+    ctx.lineTo(fx + frameW, fy + frameH);
+    ctx.lineTo(fx + frameW - arm, fy + frameH);
+    ctx.moveTo(fx + arm, fy + frameH);
+    ctx.lineTo(fx, fy + frameH);
+    ctx.lineTo(fx, fy + frameH - arm);
+  });
+
+  const baseY = height - inset - 1.6 * u;
+  const scaleX = inset;
+  const scaleW = 26 * u;
+  icon(() => {
+    ctx.moveTo(scaleX, baseY - 5.4 * u);
+    ctx.lineTo(scaleX + scaleW, baseY - 5.4 * u);
+    for (let tick = 0; tick <= 8; tick += 1) {
+      const tx = scaleX + scaleW * tick / 8;
+      const tall = tick % 4 === 0 ? 1.8 * u : 0.9 * u;
+      ctx.moveTo(tx, baseY - 5.4 * u);
+      ctx.lineTo(tx, baseY - 5.4 * u - tall);
+    }
+  });
+  icon(() => {
+    const mx = scaleX + scaleW / 2;
+    ctx.moveTo(mx, baseY - 4.6 * u);
+    ctx.lineTo(mx - 1 * u, baseY - 3 * u);
+    ctx.lineTo(mx + 1 * u, baseY - 3 * u);
+    ctx.closePath();
+  }, true);
+  label("ISO100  AWB", inset, baseY);
+
+  const { year, month, day } = selectedDateParts();
+  drawSevenSegmentText(
+    ctx,
+    `'${year.slice(-2)} ${Number(month)} ${Number(day)}`,
+    width - inset,
+    height - inset,
+    Math.max(12, 4.6 * u),
+    "#ff9d3c",
+  );
   ctx.restore();
 }
 
@@ -3679,7 +4629,7 @@ function drawCameraOverlay(ctx, width, height) {
   ctx.rotate(radians);
   ctx.translate(-logicalWidth / 2, -logicalHeight / 2);
   if (state.cameraOverlay === "digicam") drawDigicamUiLayer(ctx, logicalWidth, logicalHeight);
-  else drawCameraUiLayer(ctx, logicalWidth, logicalHeight, state.cameraOverlay);
+  else drawCameraUiLayer(ctx, logicalWidth, logicalHeight, state.cameraOverlay, snapshotCanvas(ctx.canvas));
   ctx.restore();
 }
 
@@ -3726,6 +4676,8 @@ function drawProcessed(
   if (!originalOnly) {
     applySelectedFilter(ctx, targetCanvas, output.width, output.height, renderSeed, animationPhase);
   }
+  // Like the digicam and stream frames, the movie frame stays while comparing so only the filter changes.
+  drawMovieFrame(ctx, output.width, output.height);
   let finalOutput = output;
   if (state.filmStrip) {
     finalOutput = composeFilmStrip(targetCanvas, maxSide, originalOnly, animationPhase, renderSeed);
@@ -3771,6 +4723,119 @@ function scheduleRender() {
   });
 }
 
+const toolTitles = {
+  filter: "필터 설정",
+  adjust: "사진 조정",
+  sticker: "스티커",
+  text: "글자 · 미연시 · 영화 자막",
+  frame: "프레임 · 오버레이",
+};
+
+function isPhoneLayout() {
+  return window.matchMedia("(max-width: 680px)").matches;
+}
+
+function updateToolWindowUI() {
+  elements.menuTabs.forEach((tab) => {
+    const selected = tab.dataset.tool === state.activeTool && state.toolWindowOpen;
+    tab.classList.toggle("is-active", selected);
+    tab.setAttribute("aria-pressed", String(selected));
+  });
+  elements.toolPanels.forEach((panel) => {
+    panel.hidden = panel.dataset.toolPanel !== state.activeTool;
+  });
+  elements.toolTitle.textContent = toolTitles[state.activeTool];
+  elements.workspace.classList.toggle("is-tool-closed", !state.toolWindowOpen);
+  document.body.classList.toggle("has-tool-sheet", state.toolWindowOpen && isPhoneLayout());
+}
+
+function selectTool(tool) {
+  // on phones, tapping the open tab again tucks the sheet away
+  if (isPhoneLayout() && state.toolWindowOpen && state.activeTool === tool) {
+    state.toolWindowOpen = false;
+    updateToolWindowUI();
+    return;
+  }
+  state.activeTool = tool;
+  state.toolWindowOpen = true;
+  updateToolWindowUI();
+  elements.toolPanels.find((panel) => panel.dataset.toolPanel === tool)?.closest(".tool-window-body")?.scrollTo(0, 0);
+  if (isPhoneLayout()) {
+    // keep the photo visible above the sheet
+    const frame = elements.dropZone.getBoundingClientRect();
+    const sheetTop = window.innerHeight * 0.48 - 62;
+    if (frame.bottom > sheetTop) window.scrollBy({ top: frame.top - 8, behavior: "smooth" });
+  }
+}
+
+function closeToolWindow() {
+  state.toolWindowOpen = false;
+  updateToolWindowUI();
+}
+
+function updateCurrentFilterName() {
+  elements.currentFilterName.textContent = filterNames[state.filter] || "";
+}
+
+let filterThumbnailJob = 0;
+
+// Small preview of the loaded photo through one filter, for the strip under the preview.
+function filterThumbnail(source, filter) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 144;
+  canvas.height = 96;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  const saved = { filter: state.filter, liquifyMode: state.liquifyMode };
+  state.filter = filter;
+  if (filter === "liquify") state.liquifyMode = "global";
+  try {
+    ctx.filter = presetFilter(filter, state.strength);
+    drawImageCover(ctx, source, 0, 0, canvas.width, canvas.height);
+    ctx.filter = "none";
+    applySelectedFilter(ctx, canvas, canvas.width, canvas.height, state.seed, 0);
+  } finally {
+    state.filter = saved.filter;
+    state.liquifyMode = saved.liquifyMode;
+  }
+  return canvas.toDataURL("image/jpeg", 0.82);
+}
+
+function clearFilterThumbnails() {
+  filterThumbnailJob += 1;
+  elements.filterCards.forEach((card) => {
+    const swatch = card.querySelector(".filter-swatch");
+    swatch.classList.remove("has-thumb");
+    swatch.style.removeProperty("background-image");
+  });
+}
+
+function renderFilterThumbnails() {
+  const job = ++filterThumbnailJob;
+  const source = state.vnMode === "scene" && state.vnBackground?.image ? state.vnBackground.image : state.image;
+  if (!source) {
+    clearFilterThumbnails();
+    return;
+  }
+  const cards = [...elements.filterCards];
+  let index = 0;
+  // one card per task so the page stays responsive while the strip fills in
+  const next = () => {
+    if (job !== filterThumbnailJob || index >= cards.length) return;
+    const card = cards[index];
+    index += 1;
+    const swatch = card.querySelector(".filter-swatch");
+    swatch.style.backgroundImage = `url("${filterThumbnail(source, card.dataset.filter)}")`;
+    swatch.classList.add("has-thumb");
+    window.setTimeout(next, 0);
+  };
+  next();
+}
+
+function scheduleFilterThumbnails(delay = 120) {
+  window.clearTimeout(scheduleFilterThumbnails.timer);
+  scheduleFilterThumbnails.timer = window.setTimeout(renderFilterThumbnails, delay);
+}
+
 function updateLoadedUI(file) {
   elements.emptyState.hidden = true;
   elements.dropZone.classList.add("has-image");
@@ -3782,6 +4847,7 @@ function updateLoadedUI(file) {
   updateStickerUI();
   updateOverlayUI();
   updateVnUI();
+  scheduleFilterThumbnails();
 }
 
 async function loadFile(file) {
@@ -3849,6 +4915,7 @@ function resetEditor() {
   updatePatternUI();
   updateOverlayUI();
   updateVnUI();
+  clearFilterThumbnails();
   showToast("편집기를 비웠어요.");
 }
 
@@ -3874,7 +4941,7 @@ function safeDownloadBase() {
 
 function triggerBlobDownload(blob, extension) {
   const link = document.createElement("a");
-  link.download = `${safeDownloadBase()}-${state.filter}.${extension}`;
+  link.download = `${safeDownloadBase()}-${state.filter === "none" ? "nofilter" : state.filter}.${extension}`;
   link.href = URL.createObjectURL(blob);
   link.click();
   window.setTimeout(() => URL.revokeObjectURL(link.href), 1000);
@@ -3886,7 +4953,7 @@ function updateDownloadButtonLabel(rendering = false) {
     return;
   }
   const label = state.exportFormat.toUpperCase();
-  elements.downloadButton.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0 5-5m-5 5-5-5M5 19h14" /></svg>${label}로 저장하기`;
+  elements.downloadButton.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0 5-5m-5 5-5-5M5 19h14" /></svg>${label}로 저장`;
 }
 
 function downloadImage() {
@@ -3969,6 +5036,9 @@ elements.filterCards.forEach((card) => {
     });
     updateLiquifyUI();
     updatePatternUI();
+    updateFilterAdjustUI();
+    updateCurrentFilterName();
+    card.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
     scheduleRender();
   });
 });
@@ -3978,6 +5048,7 @@ elements.strengthRange.addEventListener("input", () => {
   elements.strengthValue.textContent = `${elements.strengthRange.value}%`;
   setRangeFill(elements.strengthRange);
   scheduleRender();
+  scheduleFilterThumbnails(350);
 });
 
 elements.grainRange.addEventListener("input", () => {
@@ -3985,6 +5056,7 @@ elements.grainRange.addEventListener("input", () => {
   elements.grainValue.textContent = `${elements.grainRange.value}%`;
   setRangeFill(elements.grainRange);
   scheduleRender();
+  scheduleFilterThumbnails(350);
 });
 
 elements.liquifyModeButtons.forEach((button) => {
@@ -4071,6 +5143,7 @@ elements.dateInput.addEventListener("input", () => {
 elements.cameraOverlayButtons.forEach((button) => {
   button.addEventListener("click", () => {
     state.cameraOverlay = button.dataset.cameraOverlay;
+    if (state.cameraOverlay === "ko" || state.cameraOverlay === "en") ensureCdnFont("pretendard");
     elements.cameraOverlayButtons.forEach((item) => {
       const selected = item === button;
       item.classList.toggle("is-selected", selected);
@@ -4335,6 +5408,103 @@ elements.clearVnAssets.addEventListener("click", () => {
   scheduleRender();
 });
 
+elements.movieFrameButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    state.movieFrame = button.dataset.movieFrame === "on";
+    ensureMovieFonts();
+    updateMovieUI();
+    scheduleRender();
+  });
+});
+
+elements.movieSubtitle.addEventListener("input", () => {
+  state.movieSubtitle = elements.movieSubtitle.value;
+  scheduleRender();
+});
+
+elements.movieFontButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    state.movieFont = button.dataset.movieFont;
+    saveMovieFontChoice();
+    ensureMovieFonts();
+    updateMovieUI();
+    scheduleRender();
+    if (state.movieFont !== "dx") return;
+    ensureDxFont().then(() => {
+      if (state.movieFont === "dx" && movieFonts.dx === "missing") {
+        showToast("이 기기에 DX영화자막이 없어서 IM혜민체로 보여요. i 버튼에서 설치 방법을 볼 수 있어요.");
+      }
+    });
+  });
+});
+
+elements.movieFontInfo.addEventListener("click", openDxFontDialog);
+elements.closeDxFontDialog.addEventListener("click", closeDxFontDialog);
+elements.dxFontDialog.addEventListener("click", (event) => {
+  // A click whose target is the dialog itself landed on the backdrop or the window's thin frame.
+  if (event.target !== elements.dxFontDialog) return;
+  const rect = elements.dxFontDialog.getBoundingClientRect();
+  const inside = event.clientX >= rect.left && event.clientX <= rect.right
+    && event.clientY >= rect.top && event.clientY <= rect.bottom;
+  if (!inside) closeDxFontDialog();
+});
+elements.loadMovieFont.addEventListener("click", () => elements.movieFontInput.click());
+elements.movieFontInput.addEventListener("change", () => loadDxFontFile(elements.movieFontInput.files[0]));
+elements.clearMovieFont.addEventListener("click", clearDxFontFile);
+
+elements.movieTextColor.addEventListener("input", () => {
+  state.movieTextColor = elements.movieTextColor.value;
+  updateMovieUI();
+  scheduleRender();
+});
+
+elements.movieColorButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    state.movieTextColor = button.dataset.movieColor;
+    updateMovieUI();
+    scheduleRender();
+  });
+});
+
+elements.movieTextSize.addEventListener("input", () => {
+  state.movieTextScale = Number(elements.movieTextSize.value) / 100;
+  updateMovieUI();
+  scheduleRender();
+});
+
+elements.movieBarSize.addEventListener("input", () => {
+  state.movieBarSize = Number(elements.movieBarSize.value) / 100;
+  updateMovieUI();
+  scheduleRender();
+});
+
+elements.moviePositionButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    state.moviePosition = button.dataset.moviePosition;
+    updateMovieUI();
+    scheduleRender();
+  });
+});
+
+elements.menuTabs.forEach((tab) => {
+  tab.addEventListener("click", () => selectTool(tab.dataset.tool));
+});
+
+elements.closeToolWindow.addEventListener("click", closeToolWindow);
+
+elements.stripButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    const direction = Number(button.dataset.stripScroll);
+    elements.filterList.scrollBy({ left: direction * elements.filterList.clientWidth * 0.8, behavior: "smooth" });
+  });
+});
+
+window.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && isPhoneLayout() && state.toolWindowOpen && !elements.dxFontDialog.open) {
+    closeToolWindow();
+  }
+});
+
 elements.stickerTabs.forEach((button) => {
   button.addEventListener("click", () => {
     selectStickerGroup(button.dataset.stickerGroup);
@@ -4411,9 +5581,14 @@ setNormalizedRangeFill(elements.vnCharacterX);
 setNormalizedRangeFill(elements.streamZoom);
 setNormalizedRangeFill(elements.streamPositionX);
 setNormalizedRangeFill(elements.streamPositionY);
+state.movieFont = readSavedMovieFont();
 updateLiquifyUI();
 updatePatternUI();
+updateFilterAdjustUI();
 updateOverlayUI();
 updateVnUI();
+updateMovieUI();
+updateCurrentFilterName();
+updateToolWindowUI();
 updateDownloadButtonLabel();
-initializeStickerAssets();
+initializeStickerTray();
